@@ -1,0 +1,100 @@
+NODE_ENV=development
+APP_PORT=3000
+APP_NAME="NestJS API"
+API_PREFIX=api
+APP_FALLBACK_LANGUAGE=en
+APP_HEADER_LANGUAGE=x-custom-lang
+FRONTEND_DOMAIN=http://localhost:3000
+BACKEND_DOMAIN=http://localhost:3000
+
+DATABASE_TYPE=postgres
+DATABASE_HOST=
+DATABASE_PORT=
+DATABASE_USERNAME=
+DATABASE_PASSWORD=
+DATABASE_NAME=GTG_new
+DATABASE_SYNCHRONIZE=false
+DATABASE_MAX_CONNECTIONS=100
+DATABASE_SSL_ENABLED=false
+DATABASE_REJECT_UNAUTHORIZED=false
+DATABASE_CA=
+DATABASE_KEY=
+DATABASE_CERT=
+
+# Support "local", "s3"
+FILE_DRIVER=local
+ACCESS_KEY_ID=
+SECRET_ACCESS_KEY=
+AWS_S3_REGION=
+AWS_DEFAULT_S3_URL=
+AWS_DEFAULT_S3_BUCKET=
+
+MAIL_HOST=maildev
+MAIL_PORT=1025
+MAIL_USER=
+MAIL_PASSWORD=
+MAIL_IGNORE_TLS=true
+MAIL_SECURE=false
+MAIL_REQUIRE_TLS=false
+MAIL_DEFAULT_EMAIL=noreply@example.com
+MAIL_DEFAULT_NAME=Api
+MAIL_CLIENT_PORT=1080
+
+# IMAP Configuration for reading emails
+IMAP_HOST=imap.gmail.com
+IMAP_PORT=993
+IMAP_USER=
+IMAP_PASSWORD=
+IMAP_TLS=true
+# Check email every 1 minute (in milliseconds)
+IMAP_CHECK_INTERVAL=60000
+# Default factory ID for auto-created orders from email
+DEFAULT_FACTORY_ID=1
+# Only process emails from these senders (comma separated)
+IMAP_ALLOWED_SENDERS=
+
+AUTH_JWT_SECRET=secret
+AUTH_JWT_TOKEN_EXPIRES_IN=15m
+AUTH_REFRESH_SECRET=secret_for_refresh
+AUTH_REFRESH_TOKEN_EXPIRES_IN=3650d
+
+FACEBOOK_APP_ID=
+FACEBOOK_APP_SECRET=
+
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+APPLE_APP_AUDIENCE=[]
+
+TWITTER_CONSUMER_KEY=
+TWITTER_CONSUMER_SECRET=
+
+WORKER_HOST=redis://redis:6379/1
+
+# Secret encryption key for sensitive data (32 characters)
+SECRET_ENCRYPTION_KEY=your-32-character-secret-key-here!
+
+# ESMS Configuration (https://esms.vn)
+ESMS_API_KEY=your_esms_api_key_here
+ESMS_SECRET_KEY=your_esms_secret_key_here
+ESMS_BRAND_NAME=ChamCong
+
+FIREBASE_TYPE=service_account
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_PRIVATE_KEY_ID=your-private-key-id
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYour private key here\n-----END PRIVATE KEY-----\n"
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project-id.iam.gserviceaccount.com
+FIREBASE_CLIENT_ID=1234567890
+FIREBASE_AUTH_URI=https://accounts.google.com/o/oauth2/auth
+FIREBASE_TOKEN_URI=https://oauth2.googleapis.com/token
+FIREBASE_AUTH_PROVIDER_CERT_URL=https://www.googleapis.com/oauth2/v1/certs
+FIREBASE_CLIENT_CERT_URL=https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-xxxxx%40your-project-id.iam.gserviceaccount.com
+FIREBASE_UNIVERSE_DOMAIN=googleapis.com
+
+MISA_URL_AMISAPP=your-misa-url-amisapp
+MISA_URL_ACTAPP=your-misa-url-actapp
+
+# MISA Token Auto-Refresh
+MISA_USERNAME=your-misa-username
+MISA_PASSWORD=your-misa-password
+MISA_TOTP_SECRET=

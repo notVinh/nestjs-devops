@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page { size: A4; margin: 0; }
+        body { 
+            font-family: 'Arial', sans-serif; 
+            margin: 0; 
+            padding: 10mm; 
+            width: 190mm; /* A4 width minus padding */
+            color: #000;
+            line-height: 1.2;
+            -webkit-print-color-adjust: exact;
+        }
+        .header { display: flex; justify-content: space-between; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+        .logo { color: #facc15; font-size: 40px; font-weight: 900; font-style: italic; }
+        .slogan { color: #ff0000; font-weight: bold; font-size: 14px; text-transform: uppercase; text-align: right; width: 75%; }
+        
+        .contact-info { display: flex; justify-content: space-between; font-size: 9px; color: #374151; margin-top: 5px; }
+        .contact-left { width: 60%; }
+        .contact-right { width: 40%; text-align: right; }
+
+        .title-section { text-align: center; margin-top: 20px; }
+        .title-main { font-size: 20px; font-weight: bold; text-decoration: underline; text-transform: uppercase; }
+        .customer-name { font-weight: bold; margin-top: 5px; font-size: 12px; }
+        .date { text-align: right; font-style: italic; font-size: 10px; margin-top: 5px; }
+
+        .intro { font-style: italic; font-size: 10px; margin-top: 15px; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th { background-color: #d9ead3; border: 1px solid #000; padding: 5px; font-size: 9px; font-weight: bold; text-transform: uppercase; }
+        td { border: 1px solid #000; padding: 5px; font-size: 10px; vertical-align: middle; }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .text-red { color: #ff0000; font-weight: bold; }
+        .font-bold { font-weight: bold; }
+        .italic { font-style: italic; }
+
+        .terms { margin-top: 15px; font-size: 10px; }
+        .terms-title { font-weight: bold; text-decoration: underline; font-style: italic; }
+        .terms ul { list-style: none; padding: 0; margin: 5px 0; }
+        .terms li { margin-bottom: 2px; }
+
+        .payment-info { margin-top: 15px; font-size: 10px; }
+        .payment-title { font-weight: bold; text-decoration: underline; }
+
+        .signature-section { margin-top: 20px; display: flex; justify-content: flex-end; }
+        .signature-box { text-align: center; width: 300px; position: relative; }
+        .stamp-area { height: 100px; position: relative; display: flex; align-items: center; justify-content: center; }
+        .stamp-img { position: absolute; width: 100px; opacity: 0.8; left: 50%; transform: translateX(-50%); z-index: 1; }
+        .sign-name-ink { font-family: 'Times New Roman', serif; font-size: 24px; color: #2563eb; font-style: italic; z-index: 2; transform: translateX(20px); }
+        .boss-title { color: #ff0000; font-weight: bold; text-decoration: underline; margin: 0; }
+        .boss-name { color: #ff0000; font-weight: bold; font-style: italic; font-size: 18px; margin: 0; text-transform: uppercase; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">GTG</div>
+        <div class="slogan">Giang Thành chuyên cung cấp máy công nghệ sử dụng trong ngành dệt may</div>
+    </div>
+
+    <div class="contact-info">
+        <div class="contact-left">
+            <p>VP Hà Nội: TT03-03, Số 190 Phố Sài Đồng, P. Phúc Lợi, Q. Long Biên, TP. Hà Nội</p>
+            <p>VP HCM: Số 330 Bùi Văn Ngữ, P. Tân Thới Hiệp, Q.12, TP. HCM</p>
+            <p>VP Đà Nẵng: Số 5 đường Võ Như Hưng, P. Điện Bàn Đông, TP. Đà Nẵng</p>
+            <p>VP Gia Lai: Số 5 đường Trường Thị, P. An Nhơn Nam, Tỉnh Gia Lai</p>
+        </div>
+        <div class="contact-right">
+            <p>Máy: 0961 230 808 – Linh kiện: 0963 322 227</p>
+            <p>Email: vanlien@maymaygiangthanh.com</p>
+            <p>Website: maymaygiangthanh.com / gtgsew.com</p>
+        </div>
+    </div>
+
+    <div class="title-section">
+        <div class="title-main">BÁO GIÁ</div>
+        <div class="customer-name">Kính gửi: {{customerName}}</div>
+        <div class="date">Ngày {{day}} tháng {{month}} năm {{year}}</div>
+    </div>
+
+    <p class="intro">
+        Trước hết chúng tôi chân thành cảm ơn sự quan tâm và tin dùng các sản phẩm và dịch vụ của Công ty Cổ Phần Đầu Tư phát triển Giang Thành...
+    </p>
+
+<table>
+        <thead>
+            <tr>
+                <th width="3%">STT</th>
+                <th width="15%">Loại thiết bị</th>
+                <th width="12%">Hình ảnh</th>
+                <th width="10%">Thương Hiệu</th>
+                <th width="10%">Model</th>
+                <th width="20%">Thông tin máy</th>
+                <th width="5%">SL</th>
+                <th width="10%">Đơn giá (USD)</th>
+                <th width="10%">Thành tiền (USD)</th>
+                <th width="5%">Thời gian đặt hàng</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{#each items}} <tr>
+                <td class="text-center">{{addOne @index}}</td>
+                <td class="font-bold">{{this.productId}}</td>
+                <td class="text-center italic" style="color:#9ca3af; font-size:8px;">Hình ảnh</td>
+                <td class="text-center font-bold">{{this.brand}}</td>
+                <td class="text-center italic">{{this.model}}</td>
+                <td style="font-size: 9px;">
+                    {{#if this.notes}}{{this.notes}}{{else}}Thông số kỹ thuật tiêu chuẩn{{/if}}
+                </td>
+                <td class="text-center">{{this.quantity}}</td>
+                <td class="text-right">{{formatNumber this.unitPrice}}</td>
+                <td class="text-right font-bold italic">{{multiply this.quantity this.unitPrice}}</td>
+                <td class="text-center text-red font-bold">Hàng có sẵn</td>
+            </tr>
+            {{/each}}
+            
+            {{!-- Hàng trống để giữ khung --}}
+            {{#each emptyRows}}
+            <tr style="height: 60px;">
+                <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td class="text-center font-bold">-</td><td></td>
+            </tr>
+            {{/each}}
+        </tbody>
+    </table>
+
+    <div class="terms">
+        <p class="terms-title">Điều khoản khác:</p>
+        <ul>
+            <li>- Báo giá trên có giá trị: 15 ngày kể từ khi báo giá.</li>
+            <li>- Giá trên chưa bao gồm thuế VAT.</li>
+            <li>- Hàng mới 100%, bảo hành 12 tháng</li>
+            <li>- Giao hàng tại nhà máy của quý Công ty.</li>
+            <li>- Thanh toán: Trước 70% giá trị đơn hàng ngay sau khi ký hợp đồng, 30% ngay sau khi lắp đặt máy.</li>
+            <li>- Tỷ giá: Áp dụng theo <span class="text-red italic font-bold" style="text-decoration: underline;">Tỷ giá bán ra</span> của ngân hàng Vietcombank...</li>
+        </ul>
+    </div>
+
+    <div class="payment-info">
+        <p class="payment-title">Thông tin thanh toán:</p>
+        <p>Đơn vị hưởng: CÔNG TY CỔ PHẦN ĐẦU TƯ PHÁT TRIỂN GIANG THÀNH</p>
+        <p>Tài khoản số: 1059558688 tại Ngân hàng TMCP Ngoại Thương Việt Nam – Chi nhánh Hà Thành</p>
+        <p class="font-bold italic" style="margin-top: 5px;">Mọi chi tiết liên hệ: <span class="text-red">Mr. Liên 0967 118 879</span></p>
+    </div>
+
+    <div class="signature-section">
+    <div class="signature-box">
+        <p class="font-bold" style="font-size: 10px; text-transform: uppercase; margin-bottom: 10px;">
+            CÔNG TY CP ĐẦU TƯ PHÁT TRIỂN GIANG THÀNH
+        </p>
+        
+        <div class="stamp-area" style="position: relative; height: 120px; text-align: center;">
+            <img src="https://res.cloudinary.com/dshvydi5f/image/upload/v1771897694/GTG/signGD_dgcph8.png" 
+                 alt="Con dấu và chữ ký" 
+                 style="width: 230px; height: auto; display: block; margin: 0 auto;" />
+        </div>
+
+        {{!-- <p class="boss-title" style="color: #ff0000; font-weight: bold; text-decoration: underline; margin: 0;">
+            CHỦ TỊCH HĐQT
+        </p>
+        <p class="boss-name" style="color: #ff0000; font-weight: bold; font-style: italic; font-size: 18px; margin: 0; text-transform: uppercase;">
+            Phạm Văn Liên
+        </p> --}}
+    </div>
+</div>
+</body>
+</html>
