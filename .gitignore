@@ -43,6 +43,7 @@ yarn-error.log
 /benchmarks/memory
 build/config\.gypi
 dist/
+logs/
 
 .data
 .npmrc

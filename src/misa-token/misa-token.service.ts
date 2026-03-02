@@ -162,24 +162,20 @@ export class MisaTokenService implements OnModuleInit {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         this.logger.log(
-          `Starting scheduled MISA token refresh (attempt ${attempt}/${maxRetries})...`,
+          `Starting scheduled MISA token refresh (attempt ${attempt}/${maxRetries})...`
         );
         await this.refreshToken('scheduled');
         this.logger.log('Scheduled token refresh succeeded');
         return;
       } catch (error: any) {
         this.logger.error(
-          `Scheduled token refresh failed (attempt ${attempt}/${maxRetries}): ${error.message}`,
+          `Scheduled token refresh failed (attempt ${attempt}/${maxRetries}): ${error.message}`
         );
         if (attempt < maxRetries) {
-          this.logger.log(
-            `Retrying in ${retryDelayMs / 60000} minutes...`,
-          );
+          this.logger.log(`Retrying in ${retryDelayMs / 60000} minutes...`);
           await new Promise(resolve => setTimeout(resolve, retryDelayMs));
         } else {
-          this.logger.error(
-            'Scheduled token refresh failed after all retries',
-          );
+          this.logger.error('Scheduled token refresh failed after all retries');
         }
       }
     }
@@ -284,7 +280,7 @@ export class MisaTokenService implements OnModuleInit {
     await this.emitLog('info', 'Khởi động trình duyệt...');
 
     const browser = await puppeteer.launch({
-      headless: true,
+      headless: false,
       protocolTimeout: 120000, // Tăng timeout lên 2 phút để tránh lỗi Runtime.callFunctionOn timed out
       args: [
         '--no-sandbox',
@@ -314,7 +310,7 @@ export class MisaTokenService implements OnModuleInit {
       await this.waitForSelectorWithRetry(
         page,
         'input[type="text"], input[name="username"], input[id="username"]',
-        { timeout: 15000, retries: 3 },
+        { timeout: 15000, retries: 3 }
       );
 
       // Điền username
@@ -464,15 +460,21 @@ export class MisaTokenService implements OnModuleInit {
             try {
               await page.click(confirmBtnSelector);
             } catch (clickError: any) {
-              await this.emitLog('warning', `Lỗi click nút: ${clickError.message}, thử dùng evaluate...`);
+              await this.emitLog(
+                'warning',
+                `Lỗi click nút: ${clickError.message}, thử dùng evaluate...`
+              );
               // Fallback: dùng JavaScript để click
-              await page.evaluate((selector) => {
+              await page.evaluate(selector => {
                 const el = document.querySelector(selector);
                 if (el) (el as HTMLElement).click();
               }, confirmBtnSelector);
             }
           } else {
-            await this.emitLog('warning', 'Không tìm thấy nút xác nhận, đợi tự động chuyển trang...');
+            await this.emitLog(
+              'warning',
+              'Không tìm thấy nút xác nhận, đợi tự động chuyển trang...'
+            );
           }
 
           // Đợi navigation hoặc thay đổi URL
@@ -484,7 +486,10 @@ export class MisaTokenService implements OnModuleInit {
             });
             await this.emitLog('info', 'Navigation sau OTP hoàn tất');
           } catch (e) {
-            await this.emitLog('warning', 'Không có navigation sau 2FA, tiếp tục...');
+            await this.emitLog(
+              'warning',
+              'Không có navigation sau 2FA, tiếp tục...'
+            );
             // Đợi thêm một chút để đảm bảo page đã xử lý xong
             await new Promise(resolve => setTimeout(resolve, 5000));
           }
@@ -493,319 +498,62 @@ export class MisaTokenService implements OnModuleInit {
         }
       }
 
-      // === Step 4: Chọn app "Kế toán" ===
-      await this.emitLog('info', 'Đang chọn ứng dụng MISA Kế toán...');
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      const appSelector = await this.findOptionalSelector(page, [
-        `a.app-item-link[href="${process.env.MISA_URL_ACTAPP}"`,
-        'a[title*="Kế toán"]',
-      ]);
-
-      // Biến để track page hiện tại (có thể là tab mới)
-      let appPage: Page = page;
-
-      if (appSelector) {
-        // Lắng nghe sự kiện mở tab mới TRƯỚC KHI click
-        const newPagePromise = new Promise<Page | null>(resolve => {
-          const timeout = setTimeout(() => resolve(null), 10000);
-          browser.once('targetcreated', async target => {
-            clearTimeout(timeout);
-            const newPage = await target.page();
-            resolve(newPage);
-          });
-        });
-
-        await page.click(appSelector);
-        await this.emitLog('info', 'Đã click vào ứng dụng Kế toán');
-
-        // Đợi tab mới mở
-        await this.emitLog('info', 'Đang chờ tab mới...');
-        const newPage = await newPagePromise;
-
-        if (newPage) {
-          appPage = newPage;
-          await this.emitLog('info', 'Đã chuyển sang tab mới');
-          await appPage.bringToFront();
-
-          // Bắt callback URL chứa sid ngay khi tab mới mở
-          const callbackUrl = appPage.url();
-          await this.emitLog('info', `Tab mới URL: ${callbackUrl}`);
-          const sidMatch = callbackUrl.match(/[?&]sid=([^&]+)/);
-          if (sidMatch) {
-            await this.emitLog('info', `Đã bắt được sid từ callback URL: ${sidMatch[1].substring(0, 20)}...`);
-          }
-        } else {
-          await this.emitLog(
-            'info',
-            'Không có tab mới, sử dụng trang hiện tại'
-          );
-          try {
-            await page.waitForNavigation({
-              waitUntil: 'networkidle0',
-              timeout: 30000,
-            });
-          } catch (e) {
-            await this.emitLog(
-              'warning',
-              'Không có navigation sau khi click app'
-            );
-          }
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 3000));
-      }
-
-      // === Step 5: Đợi vào actapp.misa.vn/app và capture token ===
-      await this.emitLog('info', 'Đang chờ vào actapp.misa.vn/app...');
-
-      // Bắt token từ network - passive listener, không block request
-      let capturedTokenFromNetwork: string | null = null;
-      const capturedConsoleErrors: string[] = [];
-
-      // Log console errors từ page để debug SPA
-      appPage.on('console', (msg) => {
-        if (msg.type() === 'error') {
-          capturedConsoleErrors.push(msg.text().substring(0, 200));
-        }
-      });
-      appPage.on('pageerror', (err: Error) => {
-        capturedConsoleErrors.push(`PageError: ${err.message.substring(0, 200)}`);
+      // === BƯỚC 4: THOÁT KHỎI TRANG PROFILE / ĐỔI MẬT KHẨU ===
+      // Nếu bị kẹt ở Profile, ta ép nó về trang ID - nơi "đẻ" ra token chính
+      await this.emitLog(
+        'info',
+        'Đang ép điều hướng về id.misa.vn để lấy token...'
+      );
+      await page.goto('https://id.misa.vn/', {
+        waitUntil: 'networkidle2',
+        timeout: 30000,
       });
 
-      // Bắt token từ request Authorization header
-      appPage.on('request', (request) => {
-        const authHeader = request.headers()['authorization'];
-        if (
-          authHeader &&
-          authHeader.startsWith('Bearer ') &&
-          request.url().includes('actapp.misa.vn')
-        ) {
-          const token = authHeader.replace('Bearer ', '');
-          if (token && token.length > 20) {
-            capturedTokenFromNetwork = token;
-          }
-        }
-      });
-
-      // Bắt token từ response body
-      appPage.on('response', async (response) => {
-        try {
-          const url = response.url();
-          if (
-            url.includes('actapp.misa.vn') &&
-            response.status() === 200 &&
-            response.headers()['content-type']?.includes('application/json')
-          ) {
-            const text = await response.text();
-            try {
-              const json = JSON.parse(text);
-              const possibleToken =
-                json.access_token || json.token || json.accessToken ||
-                json.data?.access_token || json.data?.token || json.Data?.AccessToken;
-              if (possibleToken && possibleToken.length > 20) {
-                capturedTokenFromNetwork = possibleToken;
-              }
-            } catch {
-              // Response không phải JSON, bỏ qua
-            }
-          }
-        } catch {
-          // Bỏ qua lỗi khi đọc response
-        }
-      });
-
-      // Đợi URL chứa actapp.misa.vn/app
-      let urlAttempts = 0;
-      while (urlAttempts < 30) {
-        const currentUrl = appPage.url();
-        if (urlAttempts % 5 === 0) {
-          await this.emitLog(
-            'info',
-            `Kiểm tra URL: ${currentUrl.substring(0, 60)}...`
-          );
-        }
-        if (currentUrl.includes('actapp.misa.vn/app')) {
-          await this.emitLog('success', 'Đã vào actapp.misa.vn/app');
-          break;
-        }
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        urlAttempts++;
-      }
-
-      // Log URL hiện tại để debug
-      const currentUrlAfterWait = appPage.url();
-      await this.emitLog('info', `URL hiện tại: ${currentUrlAfterWait}`);
-
-      // Nếu URL vẫn ở callback, thử navigate trực tiếp đến app
-      if (currentUrlAfterWait.includes('/callback')) {
-        await this.emitLog('info', 'URL vẫn ở callback, thử navigate trực tiếp đến app...');
-        try {
-          await appPage.goto(`${process.env.MISA_URL_ACTAPP}/Overview/dashboard`, {
-            waitUntil: 'networkidle0',
-            timeout: 30000,
-          });
-          await this.emitLog('info', `URL sau navigate: ${appPage.url()}`);
-        } catch (e) {
-          await this.emitLog('warning', 'Navigate đến app timeout, tiếp tục...');
-        }
-      }
-
-      // Đợi page load hoàn toàn
+      // Chờ 5s để trang ID load xong session
       await new Promise(resolve => setTimeout(resolve, 5000));
 
-      // Log tất cả keys trong localStorage để debug
-      const allKeys = await appPage.evaluate(() => {
-        const keys: string[] = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          keys.push(localStorage.key(i) || '');
-        }
-        return keys;
-      });
-      await this.emitLog('info', `localStorage keys: ${allKeys.join(', ') || '(trống)'}`);
-
-      // Log console errors để debug SPA
-      if (capturedConsoleErrors.length > 0) {
-        await this.emitLog('warning', `Console errors (${capturedConsoleErrors.length}): ${capturedConsoleErrors.slice(0, 3).join(' | ')}`);
-      }
-
-      // Log tất cả cookies để debug
-      const allCookies = await appPage.cookies();
-      await this.emitLog('info', `Cookies (${allCookies.length}): ${allCookies.map(c => `${c.name}=${c.value.substring(0, 20)}...`).join(', ') || '(trống)'}`);
-
-      // Kiểm tra token đã bắt được từ network chưa
-      if (capturedTokenFromNetwork) {
-        amisSessionToken = capturedTokenFromNetwork;
-        await this.emitLog('success', 'Đã bắt được token từ network request');
-      }
-
-      // Nếu chưa có từ network, thử lấy từ localStorage (thử nhiều key)
-      if (!amisSessionToken) {
-        await this.emitLog('info', 'Đang lấy token từ localStorage...');
-        const localStorageToken = await appPage.evaluate(() => {
-          return localStorage.getItem('smeToken')
-            || localStorage.getItem('token')
-            || localStorage.getItem('access_token')
-            || localStorage.getItem('accessToken');
-        });
-
-        if (localStorageToken) {
-          amisSessionToken = localStorageToken;
-          await this.emitLog('success', 'Đã lấy được token từ localStorage');
-        }
-      }
-
-      // Nếu chưa có, thử lấy token từ cookie
-      if (!amisSessionToken) {
-        const tokenCookie = allCookies.find(c =>
-          c.name.toLowerCase().includes('token') ||
-          c.name === 'smeToken'
+      // === BƯỚC 5: LẤY TOKEN TỪ LOCALSTORAGE (THỬ NHIỀU KEY) ===
+      amisSessionToken = await page.evaluate(() => {
+        // Thử tất cả các key có thể chứa token mà bạn nhìn thấy
+        return (
+          localStorage.getItem('misaid_token') ||
+          localStorage.getItem('access_token') ||
+          localStorage.getItem('token') ||
+          sessionStorage.getItem('access_token')
         );
-        if (tokenCookie && tokenCookie.value.length > 20) {
-          amisSessionToken = tokenCookie.value;
-          await this.emitLog('success', `Đã lấy được token từ cookie: ${tokenCookie.name}`);
-        }
-      }
+      });
 
-      // Nếu chưa có, thử lấy từ localStorage/sessionStorage của TẤT CẢ pages trong browser
+      // === BƯỚC 6: NẾU VẪN KHÔNG CÓ, THỬ VÀO TRANG ACTAPP ===
       if (!amisSessionToken) {
-        await this.emitLog('info', 'Thử lấy token từ tất cả pages trong browser...');
-        const allPages = await browser.pages();
-        await this.emitLog('info', `Số pages mở: ${allPages.length}`);
-        for (let i = 0; i < allPages.length; i++) {
-          try {
-            const pageUrl = allPages[i].url();
-            await this.emitLog('info', `Page ${i}: ${pageUrl.substring(0, 60)}`);
-            const tokenFromPage = await allPages[i].evaluate(() => {
-              return localStorage.getItem('smeToken')
-                || sessionStorage.getItem('smeToken')
-                || localStorage.getItem('token')
-                || sessionStorage.getItem('token');
-            });
-            if (tokenFromPage && tokenFromPage.length > 20) {
-              amisSessionToken = tokenFromPage;
-              await this.emitLog('success', `Đã lấy được token từ page ${i}: ${pageUrl.substring(0, 40)}`);
-              break;
-            }
-          } catch {
-            // Page có thể đã bị đóng hoặc không truy cập được
-          }
-        }
-      }
-
-      // Nếu chưa có, reload page và thử lại
-      if (!amisSessionToken) {
-        await this.emitLog('info', 'Đang reload trang để lấy token...');
-        await appPage.reload({ waitUntil: 'networkidle0', timeout: 30000 });
+        await this.emitLog(
+          'warning',
+          'Chưa thấy token ở ID, thử sang App Kế toán...'
+        );
+        await page.goto('https://actapp.misa.vn/app', {
+          waitUntil: 'networkidle2',
+        });
         await new Promise(resolve => setTimeout(resolve, 8000));
 
-        // Kiểm tra token từ network sau reload
-        if (capturedTokenFromNetwork) {
-          amisSessionToken = capturedTokenFromNetwork;
-          await this.emitLog('success', 'Đã bắt được token từ network sau khi reload');
-        }
-
-        // Nếu vẫn chưa có, thử localStorage
-        if (!amisSessionToken) {
-          const tokenAfterReload = await appPage.evaluate(() => {
-            return localStorage.getItem('smeToken')
-              || localStorage.getItem('token')
-              || localStorage.getItem('access_token')
-              || localStorage.getItem('accessToken');
-          });
-
-          if (tokenAfterReload) {
-            amisSessionToken = tokenAfterReload;
-            await this.emitLog('success', 'Đã lấy được token từ localStorage sau khi reload');
-          }
-        }
+        amisSessionToken = await page.evaluate(() => {
+          return (
+            localStorage.getItem('smeToken') || localStorage.getItem('token')
+          );
+        });
       }
 
-      // Đợi thêm nếu vẫn chưa có token - kiểm tra cả network và localStorage
-      let attempts = 0;
-      while (!amisSessionToken && attempts < 30) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        attempts++;
-
-        // Kiểm tra token từ network mỗi giây
-        if (capturedTokenFromNetwork) {
-          amisSessionToken = capturedTokenFromNetwork;
-          await this.emitLog('success', 'Đã bắt được token từ network request');
-          break;
-        }
-
-        // Thử lấy từ localStorage mỗi 5 giây
-        if (attempts % 5 === 0) {
-          await this.emitLog('info', `Thử lấy token lần ${attempts / 5}...`);
-          const retryToken = await appPage.evaluate(() => {
-            return localStorage.getItem('smeToken');
-          });
-          if (retryToken) {
-            amisSessionToken = retryToken;
-            await this.emitLog('success', 'Đã lấy được token từ localStorage');
-            break;
-          }
-        }
+      if (amisSessionToken) {
+        await this.emitLog('success', 'Đã lấy được Token!');
+      } else {
+        throw new Error('Không thể tìm thấy token ở bất kỳ trang nào.');
       }
 
       await browser.close();
-
-      if (!amisSessionToken) {
-        throw new Error('Không thể lấy token sau 60 giây');
-      }
-
-      // Gọi API logoff để đăng xuất session trên MISA
-      await this.emitLog('info', 'Đang đăng xuất session trên MISA...');
-      await this.callLogoffApi(amisSessionToken);
-      await this.emitLog('success', 'Đã đăng xuất session thành công');
-
       return amisSessionToken;
-    } catch (error) {
-      await browser.close();
+    } catch (error: any) {
+      if (browser) await browser.close();
       throw error;
     }
   }
-
   // Đọc OTP từ email MISA
   private async getOtpFromEmail(
     maxRetries = 10,
@@ -913,7 +661,7 @@ export class MisaTokenService implements OnModuleInit {
   private async waitForSelectorWithRetry(
     page: Page,
     selector: string,
-    options: { timeout?: number; retries?: number } = {},
+    options: { timeout?: number; retries?: number } = {}
   ): Promise<void> {
     const timeout = options.timeout || 15000;
     const maxRetries = options.retries || 3;
@@ -928,7 +676,7 @@ export class MisaTokenService implements OnModuleInit {
         }
         await this.emitLog(
           'warning',
-          `Không tìm thấy selector (lần ${attempt}/${maxRetries}), đang thử lại...`,
+          `Không tìm thấy selector (lần ${attempt}/${maxRetries}), đang thử lại...`
         );
         // Reload page và thử lại
         try {
