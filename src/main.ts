@@ -13,6 +13,7 @@ import { AllConfigType } from './config/config.type';
 import { configFirebase } from './config/firebase.config';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
+import morgan from 'morgan';
 
 async function bootstrap() {
   // Initialize Firebase early in the application lifecycle
@@ -48,6 +49,8 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, options);
   SwaggerModule.setup('docs', app, document);
+
+  app.use(morgan('dev'));
 
   await app.listen(configService.getOrThrow('app.port', { infer: true }));
 }

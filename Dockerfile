@@ -1,20 +1,40 @@
-FROM node:18.17.0-alpine
+# Stage 1: Build
+FROM node:20-alpine AS builder
 
-RUN apk add --no-cache bash
-RUN npm i -g @nestjs/cli typescript ts-node
+WORKDIR /app
 
-COPY package*.json /tmp/app/
-RUN cd /tmp/app && npm install
+# Cài đặt công cụ build cho Alpine
+RUN apk add --no-cache python3 make g++
 
-COPY . /usr/src/app
-RUN cp -a /tmp/app/node_modules /usr/src/app
-COPY ./wait-for-it.sh /opt/wait-for-it.sh
-COPY ./startup.dev.sh /opt/startup.dev.sh
-RUN sed -i 's/\r//g' /opt/wait-for-it.sh
-RUN sed -i 's/\r//g' /opt/startup.dev.sh
+COPY package*.json ./
+RUN npm install
 
-WORKDIR /usr/src/app
-RUN cp env-example .env
+COPY . .
 RUN npm run build
 
-CMD ["/opt/startup.dev.sh"]
+# Stage 2: Run (Quan trọng nhất)
+FROM node:20-alpine
+
+# Cài đặt Chromium và các thư viện cần thiết trực tiếp trên Alpine
+RUN apk add --no-cache \
+      chromium \
+      nss \
+      freetype \
+      harfbuzz \
+      ca-certificates \
+      ttf-freefont
+
+# Biến môi trường để Puppeteer biết dùng Chromium có sẵn của hệ thống
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
+WORKDIR /app
+
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/.env .env 
+
+EXPOSE 5000
+
+CMD ["npm", "run", "start:prod"]

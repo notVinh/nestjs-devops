@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # Prometheus: Thu thập CPU/RAM
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: monitoring_prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    ports:
+      - "5001:9090"
+    networks:
+      - monitoring_net
+
+  # Loki: Thu thập Log từ Docker
+  loki:
+    image: grafana/loki:latest
+    container_name: monitoring_loki
+    volumes:
+      - ./loki-config.yml:/etc/loki/local-config.yaml # Thêm dòng này
+    ports:
+      - "5003:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - monitoring_net
+
+  # Grafana: Vẽ biểu đồ và gửi Telegram
+  grafana:
+    image: grafana/grafana:latest
+    container_name: monitoring_grafana
+    ports:
+      - "5002:3000" # Truy cập Grafana qua cổng 3002 của máy ảo
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin_password_cua_ban
+    networks:
+      - monitoring_net
+
+  # Node Exporter: Lấy thông số của máy ảo Ubuntu (Host)
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: monitoring_node_exporter
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+    ports:
+      - "5004:9100"
+    networks:
+      - monitoring_net
+
+networks:
+  monitoring_net:
+    driver: bridge
