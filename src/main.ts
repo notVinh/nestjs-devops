@@ -41,7 +41,7 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter(logger));
 
   const options = new DocumentBuilder()
-    .setTitle('API NESTJS - CI/CD VERSION')
+    .setTitle('API')
     .setDescription('API docs')
     .setVersion('1.0')
     .addBearerAuth()

@@ -48,3 +48,16 @@ jobs:
 
             # Dọn dẹp các image cũ để tiết kiệm ổ cứng
             docker image prune -f
+
+      - name: Send Telegram Notification
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_TO }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          message: |
+            🚀 Vinh ơi, code mới đã lên server thành công!
+
+            🔹 Dự án: NestJS DevOps
+            🔹 Trạng thái: Đã cập nhật Container
+            🔹 Thời gian: ${{ github.event.head_commit.timestamp }}
+            🔹 Nội dung: ${{ github.event.head_commit.message }}
