@@ -43,8 +43,8 @@ jobs:
             echo "${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}" | docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
 
             # Kéo bản mới nhất về và khởi động lại
-            docker-compose pull
-            docker-compose up -d
+            docker compose pull
+            docker compose up -d
 
             # Dọn dẹp các image cũ để tiết kiệm ổ cứng
             docker image prune -f
