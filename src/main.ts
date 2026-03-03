@@ -28,7 +28,7 @@ async function bootstrap() {
     configService.getOrThrow('app.apiPrefix', { infer: true }),
     {
       exclude: ['/'],
-    },
+    }
   );
   app.enableVersioning({
     type: VersioningType.URI,
@@ -41,7 +41,7 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter(logger));
 
   const options = new DocumentBuilder()
-    .setTitle('API')
+    .setTitle('API NESTJS - CI/CD VERSION')
     .setDescription('API docs')
     .setVersion('1.0')
     .addBearerAuth()
