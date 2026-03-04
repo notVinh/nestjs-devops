@@ -532,7 +532,56 @@ export class MisaTokenService implements OnModuleInit {
         await page.goto('https://actapp.misa.vn/app', {
           waitUntil: 'networkidle2',
         });
-        await new Promise(resolve => setTimeout(resolve, 8000));
+
+        // Đợi một chút để popup "Đang có người dùng khác..." kịp hiển thị
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        try {
+          // 1. Tìm nút "Tiếp tục đăng nhập" dựa trên class và text
+          const continueBtnSelector =
+            '.ms-button-primary, button.ms-button-primary';
+
+          // Đợi selector xuất hiện (tối đa 10s)
+          const hasPopup = await page
+            .waitForSelector(continueBtnSelector, { timeout: 10000 })
+            .catch(() => null);
+
+          if (hasPopup) {
+            const clicked = await page.evaluate(selector => {
+              const buttons = Array.from(document.querySelectorAll(selector));
+              // Tìm đúng nút có nội dung "Tiếp tục đăng nhập"
+              const targetBtn = buttons.find(
+                btn => btn.textContent?.includes('Tiếp tục đăng nhập')
+              );
+              if (targetBtn) {
+                (targetBtn as HTMLElement).click();
+                return true;
+              }
+              return false;
+            }, continueBtnSelector);
+
+            if (clicked) {
+              await this.emitLog(
+                'warning',
+                'Đã phát hiện và click "Tiếp tục đăng nhập" tại ACTAPP'
+              );
+              // Sau khi click, trang thường sẽ load lại để chiếm quyền điều khiển (session)
+              await page
+                .waitForNavigation({
+                  waitUntil: 'networkidle0',
+                  timeout: 30000,
+                })
+                .catch(() => null);
+              // Đợi thêm để session được thiết lập vào localStorage
+              await new Promise(resolve => setTimeout(resolve, 5000));
+            }
+          }
+        } catch (e) {
+          await this.emitLog(
+            'info',
+            'Không thấy popup xác nhận tại ACTAPP, tiếp tục lấy token.'
+          );
+        }
 
         amisSessionToken = await page.evaluate(() => {
           return (
