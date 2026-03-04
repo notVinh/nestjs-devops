@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
 WORKDIR /app
 
@@ -13,7 +13,7 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Run (Quan trọng nhất)
-FROM node:20-alpine
+FROM node:20-slim
 
 # Cài đặt Chromium và các thư viện cần thiết trực tiếp trên Alpine
 RUN apk add --no-cache \

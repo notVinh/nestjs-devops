@@ -286,6 +286,8 @@ export class MisaTokenService implements OnModuleInit {
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
+        '--single-process', // Rất quan trọng để tránh crash process trên Linux
+        '--no-zygote',
         '--disable-gpu',
       ],
     });
@@ -605,6 +607,8 @@ export class MisaTokenService implements OnModuleInit {
           );
         });
       }
+
+      await page.screenshot({ path: 'debug_docker.png' });
 
       if (amisSessionToken) {
         await this.emitLog('success', 'Đã lấy được Token!');
