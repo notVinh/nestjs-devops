@@ -583,6 +583,22 @@ export class MisaTokenService implements OnModuleInit {
           );
         }
 
+        await this.emitLog('info', 'Đang quét tìm token trong localStorage...');
+        let retryCount = 0;
+        while (retryCount < 5) {
+          // Thử lại 5 lần, mỗi lần cách nhau 2s
+          amisSessionToken = await page.evaluate(() => {
+            return (
+              localStorage.getItem('smeToken') || localStorage.getItem('token')
+            );
+          });
+
+          if (amisSessionToken) break;
+
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          retryCount++;
+        }
+
         amisSessionToken = await page.evaluate(() => {
           return (
             localStorage.getItem('smeToken') || localStorage.getItem('token')
