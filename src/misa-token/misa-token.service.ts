@@ -280,7 +280,7 @@ export class MisaTokenService implements OnModuleInit {
     await this.emitLog('info', 'Khởi động trình duyệt...');
 
     const browser = await puppeteer.launch({
-      headless: false,
+      headless: true,
       protocolTimeout: 120000, // Tăng timeout lên 2 phút để tránh lỗi Runtime.callFunctionOn timed out
       args: [
         '--no-sandbox',
