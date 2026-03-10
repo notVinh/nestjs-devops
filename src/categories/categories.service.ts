@@ -82,22 +82,36 @@ export class CategoriesService {
   //     .orderBy('category.level', 'ASC')
   //     .getMany();
   // }
-  async findAll(page: number = 1, limit: number = 10) {
-    const skip = (page - 1) * limit;
+  // async findAll(page: number = 1, limit: number = 10) {
+  //   const skip = (page - 1) * limit;
 
+  //   const [data, total] = await this.categoryRepository.findAndCount({
+  //     relations: ['translations', 'products'], // Lấy toàn bộ mảng ngôn ngữ
+  //     order: { id: 'DESC' }, // Sắp xếp mới nhất lên đầu
+  //     take: limit,
+  //     skip: skip,
+  //   });
+
+  //   return {
+  //     data,
+  //     meta: {
+  //       total,
+  //       page,
+  //       lastPage: Math.ceil(total / limit),
+  //     },
+  //   };
+  // }
+
+  async findAll() {
     const [data, total] = await this.categoryRepository.findAndCount({
       relations: ['translations', 'products'], // Lấy toàn bộ mảng ngôn ngữ
       order: { id: 'DESC' }, // Sắp xếp mới nhất lên đầu
-      take: limit,
-      skip: skip,
     });
 
     return {
       data,
       meta: {
         total,
-        page,
-        lastPage: Math.ceil(total / limit),
       },
     };
   }

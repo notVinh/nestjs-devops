@@ -34,12 +34,10 @@ export class CategoriesController {
   // }
 
   @Get()
-  async findAll(@Query('page') page: string, @Query('limit') limit: string) {
+  async findAll() {
     // Chuyển đổi string từ query sang number
-    const p = parseInt(page) || 1;
-    const l = parseInt(limit) || 10;
 
-    return this.categoriesService.findAll(p, l);
+    return this.categoriesService.findAll();
   }
 
   @Get(':id')
