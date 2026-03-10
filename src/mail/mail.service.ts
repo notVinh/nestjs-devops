@@ -194,9 +194,6 @@ export class MailService {
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
-        '--single-process', // Rất quan trọng để tránh crash process trên Linux
-        '--no-zygote',
-        '--disable-gpu',
       ],
     });
     const page = await browser.newPage();
@@ -212,7 +209,16 @@ export class MailService {
     await this.mailerService.sendMail({
       to: to,
       subject: `[GTG] Báo giá thiết bị - ${quotationData.customerName}`,
-      text: `Kính gửi quý khách báo giá từ Giang Thành GTG. Chi tiết vui lòng xem file đính kèm. Nếu quý khách hàng thấy báo giá hợp lý, vui lòng xác nhận qua đường link sau: ${process.env.LANDING_DOMAIN}/customer/order/${quotationData.confirmationToken}. Cảm ơn quý khách đã quan tâm đến sản phẩm của chúng tôi.`,
+      text: `Kính gửi Quý Khách,
+
+Cảm ơn Quý Khách đã quan tâm và tin tưởng tìm hiểu các sản phẩm mang thương hiệu GTG của Công ty Máy May Giang Thành.
+Chúng tôi xin gửi tới Quý Khách báo giá sản phẩm, chi tiết vui lòng xem trong file đính kèm.
+
+Nếu Quý Khách thấy sản phẩm phù hợp và mức giá hợp lý, kính mong Quý Khách xác nhận qua đường link bên dưới để chúng tôi có thể tiếp tục hỗ trợ và chăm sóc Quý Khách tốt hơn.
+
+Trân trọng cảm ơn!
+
+${process.env.LANDING_DOMAIN}/customer/order/${quotationData.confirmationToken}`,
       attachments: [
         {
           filename: `Bao_Gia_GTG_${Date.now()}.pdf`,
