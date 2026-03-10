@@ -188,7 +188,17 @@ export class MailService {
     });
 
     // 2. Sử dụng Puppeteer để chuyển HTML thành PDF
-    const browser = await puppeteer.launch({ headless: true });
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--single-process', // Rất quan trọng để tránh crash process trên Linux
+        '--no-zygote',
+        '--disable-gpu',
+      ],
+    });
     const page = await browser.newPage();
     await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
     const pdfBuffer = await page.pdf({
