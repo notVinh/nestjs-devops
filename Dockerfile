@@ -45,6 +45,8 @@ COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 
+COPY --from=builder /app/src/mail/mail-templates ./src/mail/mail-templates
+
 # Mở port cho ứng dụng
 EXPOSE 5000
 
