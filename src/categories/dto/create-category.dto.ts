@@ -35,6 +35,10 @@ export class CreateCategoryDto {
   @IsOptional()
   level?: number;
 
+  @IsNumber()
+  @IsOptional()
+  order?: number;
+
   @IsString()
   @IsOptional()
   image?: string;

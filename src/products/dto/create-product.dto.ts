@@ -58,6 +58,10 @@ export class CreateProductDto {
   images?: string[];
 
   @IsOptional()
+  @IsArray()
+  videos?: string[];
+
+  @IsOptional()
   categoryId?: number;
 
   @IsArray()

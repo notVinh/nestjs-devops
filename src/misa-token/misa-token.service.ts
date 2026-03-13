@@ -286,7 +286,7 @@ export class MisaTokenService implements OnModuleInit {
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
-        '--single-process', // Rất quan trọng để tránh crash process trên Linux
+        // '--single-process', // Rất quan trọng để tránh crash process trên Linux
         '--no-zygote',
         '--disable-gpu',
       ],

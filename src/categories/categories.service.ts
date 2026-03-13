@@ -143,7 +143,7 @@ export class CategoriesService {
    * UPDATE: Giữ nguyên logic đổi parentId, đổi level và Object.assign
    */
   async update(id: number, updateCategoryDto: UpdateCategoryDto) {
-    const { parentId, translations, image } = updateCategoryDto;
+    const { parentId, translations, image, order } = updateCategoryDto;
 
     const category = await this.categoryRepository.findOne({
       where: { id },
@@ -172,7 +172,13 @@ export class CategoriesService {
         }
       }
 
-      if (image) category.image = image;
+      if (image !== undefined) {
+        category.image = image;
+      }
+
+      if (order !== undefined) {
+        category.order = order;
+      }
       await queryRunner.manager.save(category);
 
       // Cập nhật đa ngôn ngữ: Nếu có ngôn ngữ mới thì tạo, có rồi thì update

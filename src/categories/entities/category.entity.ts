@@ -36,6 +36,9 @@ export class Category extends EntityHelper {
   @DeleteDateColumn()
   deletedAt: Date;
 
+  @Column({ default: 0 })
+  order: number;
+
   // Quan hệ với bảng dịch (Đa ngôn ngữ)
   @OneToMany(() => CategoryTranslation, translation => translation.category)
   translations: CategoryTranslation[];

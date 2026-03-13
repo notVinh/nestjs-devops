@@ -32,6 +32,9 @@ export class Product {
   @Column({ type: 'jsonb', nullable: true })
   images: string[];
 
+  @Column({ type: 'jsonb', nullable: true })
+  videos: string[];
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
