@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsArray,
   IsObject,
+  IsNumber,
 } from 'class-validator';
 
 export class ProductTranslationDto {
@@ -45,6 +46,10 @@ export class CreateProductDto {
 
   @IsOptional()
   price?: number;
+
+  @IsNumber()
+  @IsOptional()
+  order?: number;
 
   @IsOptional()
   originalPrice?: number;

@@ -21,8 +21,20 @@ export class ProductsService {
   async create(createProductDto: CreateProductDto) {
     const { categoryId, translations, ...productData } = createProductDto;
 
+    let nextOrder = 0;
+
+    if (categoryId) {
+      // Đếm số lượng sản phẩm hiện có trong category này
+      // Bạn cũng có thể dùng .maximum('order', { category: { id: categoryId } })
+      // nếu muốn lấy số lớn nhất + 1
+      nextOrder = await this.productRepository.count({
+        where: { category: { id: categoryId } },
+      });
+    }
+
     const product = this.productRepository.create({
       ...productData,
+      order: nextOrder + 1, // Gán số thứ tự mới bằng tổng số lượng (ví dụ có 5 cái 0-4 thì cái mới là 5)
       // category: categoryId ? { id: categoryId } : null,
       category: categoryId ? ({ id: categoryId } as any) : null,
       translations: translations, // TypeORM tự động lưu vào bảng translation nhờ cascade: true

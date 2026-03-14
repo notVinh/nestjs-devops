@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, IsNull } from 'typeorm';
 import { Category } from './entities/category.entity';
 import { CategoryTranslation } from './entities/category-translation.entity';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -30,6 +30,11 @@ export class CategoriesService {
 
     try {
       const newCategory = this.categoryRepository.create({ image });
+
+      const currentCount = await queryRunner.manager.count('categories', {
+        where: { parentId: parentId ? parentId : IsNull() },
+      });
+      newCategory.order = currentCount + 1;
 
       // Logic cũ: Tính level dựa trên cha
       if (parentId) {
@@ -105,7 +110,10 @@ export class CategoriesService {
   async findAll() {
     const [data, total] = await this.categoryRepository.findAndCount({
       relations: ['translations', 'products'], // Lấy toàn bộ mảng ngôn ngữ
-      order: { id: 'DESC' }, // Sắp xếp mới nhất lên đầu
+      order: {
+        order: 'ASC', // Sắp xếp theo thứ tự Vinh đã sắp xếp (0, 1, 2...)
+        id: 'DESC', // Nếu order bằng nhau, cái nào tạo sau (ID lớn) vẫn hiện lên trước
+      }, // Sắp xếp mới nhất lên đầu
     });
 
     return {
@@ -228,6 +236,12 @@ export class CategoriesService {
     const category = await this.categoryRepository.findOne({
       where: { id },
       relations: ['products', 'products.translations'],
+      order: {
+        products: {
+          order: 'ASC', // Sắp xếp sản phẩm theo thứ tự tăng dần
+          id: 'DESC', // Nếu order bằng nhau (ví dụ đều là 0), ông nào mới hơn (ID lớn hơn) sẽ lên trước
+        },
+      },
     });
     if (!category) throw new NotFoundException(`Không tìm thấy ID ${id}`);
     return category;

@@ -23,6 +23,9 @@ export class Product {
   @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
   originalPrice: number;
 
+  @Column({ default: 0 })
+  order: number;
+
   @Column({ nullable: true })
   brand: string;
 
