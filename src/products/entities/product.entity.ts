@@ -29,6 +29,9 @@ export class Product {
   @Column({ nullable: true })
   brand: string;
 
+  @Column({ nullable: true })
+  model: string;
+
   @Column({ type: 'jsonb', nullable: true })
   specs: any;
 

@@ -47,6 +47,9 @@ export class CreateProductDto {
   @IsOptional()
   price?: number;
 
+  @IsOptional()
+  model?: string;
+
   @IsNumber()
   @IsOptional()
   order?: number;
