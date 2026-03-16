@@ -216,37 +216,63 @@ export class ProductsService {
 
   // products/products.service.ts
 
+  // async findAllWithSearch(search?: string, lang: string = 'vi') {
+  //   const queryBuilder = this.productRepository
+  //     .createQueryBuilder('product')
+  //     // 1. Join lấy Category
+  //     .leftJoinAndSelect('product.category', 'category')
+
+  //     // 2. QUAN TRỌNG: Join lấy translations của Category
+  //     // Bạn phải join từ alias 'category' đã tạo ở bước 1
+  //     .leftJoinAndSelect(
+  //       'category.translations',
+  //       'catTrans', // Đặt alias khác đi để tránh trùng với 'translation' của product
+  //       'catTrans.languageCode = :lang',
+  //       { lang }
+  //     )
+
+  //     // 3. Join lấy translations của Product
+  //     .leftJoinAndSelect(
+  //       'product.translations',
+  //       'translation',
+  //       'translation.languageCode = :lang',
+  //       { lang }
+  //     );
+
+  //   if (search) {
+  //     queryBuilder.andWhere('translation.name ILIKE :search', {
+  //       search: `%${search}%`,
+  //     });
+  //   }
+
+  //   // Nếu bạn đang dùng phân trang thủ công hoặc paginate helper,
+  //   // hãy đảm bảo dùng getRawAndEntities hoặc lưu ý cách TypeORM map relation.
+  //   return await queryBuilder.orderBy('product.createdAt', 'DESC').getMany();
+  // }
+
   async findAllWithSearch(search?: string, lang: string = 'vi') {
     const queryBuilder = this.productRepository
       .createQueryBuilder('product')
-      // 1. Join lấy Category
       .leftJoinAndSelect('product.category', 'category')
-
-      // 2. QUAN TRỌNG: Join lấy translations của Category
-      // Bạn phải join từ alias 'category' đã tạo ở bước 1
-      .leftJoinAndSelect(
-        'category.translations',
-        'catTrans', // Đặt alias khác đi để tránh trùng với 'translation' của product
-        'catTrans.languageCode = :lang',
-        { lang }
-      )
-
-      // 3. Join lấy translations của Product
-      .leftJoinAndSelect(
-        'product.translations',
-        'translation',
-        'translation.languageCode = :lang',
-        { lang }
-      );
+      .leftJoinAndSelect('category.translations', 'catTrans')
+      .leftJoinAndSelect('product.translations', 'translation');
 
     if (search) {
-      queryBuilder.andWhere('translation.name ILIKE :search', {
-        search: `%${search}%`,
+      // Tìm những ID sản phẩm có tên khớp với từ khóa search ở ngôn ngữ hiện tại
+      queryBuilder.andWhere(qb => {
+        const subQuery = qb
+          .subQuery()
+          .select('pt.productId') // Thay productId bằng tên cột FK trong bảng translation của bạn
+          .from('productTranslations', 'pt') // Thay bằng tên bảng translation trong DB
+          .where('pt.name ILIKE :search')
+          .andWhere('pt.languageCode = :lang')
+          .getQuery();
+        return 'product.id IN ' + subQuery;
       });
+
+      queryBuilder.setParameters({ search: `%${search}%`, lang });
     }
 
-    // Nếu bạn đang dùng phân trang thủ công hoặc paginate helper,
-    // hãy đảm bảo dùng getRawAndEntities hoặc lưu ý cách TypeORM map relation.
     return await queryBuilder.orderBy('product.createdAt', 'DESC').getMany();
   }
 }
