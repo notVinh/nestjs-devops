@@ -275,4 +275,18 @@ export class ProductsService {
 
     return await queryBuilder.orderBy('product.createdAt', 'DESC').getMany();
   }
+
+  async findByIds(ids: string[]) {
+    if (!ids || ids.length === 0) return [];
+
+    const products = await this.productRepository.find({
+      where: {
+        id: In(ids),
+      },
+      relations: ['translations', 'category'],
+    });
+
+    // TypeORM đã tự lọc, nhưng return về để chắc chắn không có phần tử null/undefined
+    return products.filter(product => !!product);
+  }
 }

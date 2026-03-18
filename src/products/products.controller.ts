@@ -60,6 +60,16 @@ export class ProductsController {
     );
   }
 
+  @Get('batch') // Endpoint: GET /products/batch?ids=...
+  async findBatch(@Query('ids') idsString: string) {
+    if (!idsString) return [];
+
+    // Chuyển chuỗi "id1,id2,id3" thành mảng ["id1", "id2", "id3"]
+    const ids = idsString.split(',');
+
+    return this.productsService.findByIds(ids);
+  }
+
   // 5. Lấy chi tiết 1 sản phẩm (Trả về full mảng translations để edit)
   @Get(':id')
   findOne(@Param('id') id: string) {
@@ -77,4 +87,6 @@ export class ProductsController {
   remove(@Param('id') id: string) {
     return this.productsService.remove(id);
   }
+
+  // products/products.controller.ts
 }
