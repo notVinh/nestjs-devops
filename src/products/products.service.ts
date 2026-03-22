@@ -1,16 +1,18 @@
 // products/products.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { Product } from './entities/product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { Category } from 'src/categories/entities/category.entity';
 
 @Injectable()
 export class ProductsService {
   constructor(
     @InjectRepository(Product)
-    private readonly productRepository: Repository<Product>
+    private readonly productRepository: Repository<Product>,
+    private dataSource: DataSource
   ) {}
 
   // async create(createProductDto: CreateProductDto) {
@@ -93,20 +95,62 @@ export class ProductsService {
   //   return this.productRepository.save(product);
   // }
 
+  // async update(id: string, updateProductDto: UpdateProductDto) {
+  //   // Với cấu trúc phức tạp, cách tốt nhất là xóa các bản dịch cũ và chèn lại
+  //   // hoặc cập nhật từng bản dịch nếu dùng Transaction
+  //   const { translations, categoryId, ...productData } = updateProductDto;
+
+  //   const product = await this.findOne(id);
+
+  //   if (categoryId) product.category = { id: categoryId } as any;
+  //   Object.assign(product, productData);
+
+  //   if (translations) {
+  //     product.translations = translations as any;
+  //   }
+
+  //   return this.productRepository.save(product);
+  // }
+
   async update(id: string, updateProductDto: UpdateProductDto) {
-    // Với cấu trúc phức tạp, cách tốt nhất là xóa các bản dịch cũ và chèn lại
-    // hoặc cập nhật từng bản dịch nếu dùng Transaction
     const { translations, categoryId, ...productData } = updateProductDto;
 
-    const product = await this.findOne(id);
+    // 1. Tìm sản phẩm hiện tại (bao gồm cả categoryId cũ để so sánh)
+    const product = await this.productRepository.findOne({
+      where: { id },
+      relations: ['category'],
+    });
 
-    if (categoryId) product.category = { id: categoryId } as any;
+    if (!product) throw new NotFoundException('Không tìm thấy sản phẩm');
+
+    // 2. Kiểm tra nếu có sự thay đổi về Danh mục (categoryId)
+    if (
+      categoryId &&
+      (!product.category || product.category.id !== categoryId)
+    ) {
+      // Tìm MAX order của danh mục MỚI
+      const queryBuilder = this.productRepository
+        .createQueryBuilder('product')
+        .select('MAX(product.order)', 'maxOrder')
+        .where('product.categoryId = :categoryId', { categoryId });
+
+      const result = await queryBuilder.getRawOne();
+      const maxOrder = result.maxOrder ? parseInt(result.maxOrder) : 0;
+
+      // Gán danh mục mới và order mới cho sản phẩm
+      product.category = { id: categoryId } as any;
+      product.order = maxOrder + 1;
+    }
+
+    // 3. Cập nhật các thông tin cơ bản khác
     Object.assign(product, productData);
 
+    // 4. Xử lý Translations (Nếu có)
     if (translations) {
       product.translations = translations as any;
     }
 
+    // 5. Lưu lại (TypeORM save sẽ tự động xử lý insert/update cho các quan hệ đã cascade)
     return this.productRepository.save(product);
   }
 
@@ -170,28 +214,28 @@ export class ProductsService {
     return { data: formattedData, meta: { total, page, limit } };
   }
 
-  async updateCategory(productIds: string[], categoryId: number) {
-    // 1. Thực hiện update hàng loạt
-    // SQL tương đương: UPDATE products SET category_id = :categoryId WHERE id IN (:...productIds)
+  // async updateCategory(productIds: string[], categoryId: number) {
+  //   // 1. Thực hiện update hàng loạt
+  //   // SQL tương đương: UPDATE products SET category_id = :categoryId WHERE id IN (:...productIds)
 
-    console.log(productIds, categoryId);
-    const result = await this.productRepository.update(
-      { id: In(productIds) }, // Điều kiện lọc: Những ID nằm trong mảng
-      {
-        category: { id: categoryId }, // Gán quan hệ mới (TypeORM sẽ tự hiểu là category_id)
-      }
-    );
+  //   console.log(productIds, categoryId);
+  //   const result = await this.productRepository.update(
+  //     { id: In(productIds) }, // Điều kiện lọc: Những ID nằm trong mảng
+  //     {
+  //       category: { id: categoryId }, // Gán quan hệ mới (TypeORM sẽ tự hiểu là category_id)
+  //     }
+  //   );
 
-    // 2. Kiểm tra xem có bản ghi nào được cập nhật không
-    if (result.affected === 0) {
-      throw new NotFoundException('Không tìm thấy sản phẩm nào để cập nhật');
-    }
+  //   // 2. Kiểm tra xem có bản ghi nào được cập nhật không
+  //   if (result.affected === 0) {
+  //     throw new NotFoundException('Không tìm thấy sản phẩm nào để cập nhật');
+  //   }
 
-    return {
-      message: `Đã cập nhật danh mục cho ${result.affected} sản phẩm thành công`,
-      affected: result.affected,
-    };
-  }
+  //   return {
+  //     message: `Đã cập nhật danh mục cho ${result.affected} sản phẩm thành công`,
+  //     affected: result.affected,
+  //   };
+  // }
 
   // async findAllWithSearch(search?: string, categoryId?: number) {
   //   const queryBuilder = this.productRepository
@@ -249,6 +293,63 @@ export class ProductsService {
   //   // hãy đảm bảo dùng getRawAndEntities hoặc lưu ý cách TypeORM map relation.
   //   return await queryBuilder.orderBy('product.createdAt', 'DESC').getMany();
   // }
+
+  async updateCategory(productIds: string[], categoryId: number) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // 1. Kiểm tra danh mục đích có tồn tại không
+      const category = await queryRunner.manager.findOneBy(Category, {
+        id: categoryId,
+      });
+      if (!category) throw new NotFoundException('Danh mục không tồn tại');
+
+      // 2. Lấy MAX order hiện tại của các sản phẩm TRONG danh mục này
+      const result = await queryRunner.manager
+        .createQueryBuilder(Product, 'product')
+        .select('MAX(product.order)', 'maxOrder')
+        .where('product.categoryId = :categoryId', { categoryId })
+        .getRawOne();
+
+      let currentMaxOrder = result.maxOrder ? parseInt(result.maxOrder) : 0;
+
+      // 3. Cập nhật từng sản phẩm với order tăng dần từ Max
+      const updatePromises = productIds.map(id => {
+        currentMaxOrder++; // Mỗi sản phẩm mới sẽ có order cao hơn sản phẩm trước đó 1 đơn vị
+        return queryRunner.manager.update(
+          Product,
+          { id },
+          {
+            category: { id: categoryId },
+            order: currentMaxOrder,
+          }
+        );
+      });
+
+      const updateResults = await Promise.all(updatePromises);
+      const totalAffected = updateResults.reduce(
+        (sum, res) => sum + (res.affected || 0),
+        0
+      );
+
+      if (totalAffected === 0) {
+        throw new NotFoundException('Không tìm thấy sản phẩm nào để cập nhật');
+      }
+
+      await queryRunner.commitTransaction();
+      return {
+        message: `Đã chuyển ${totalAffected} sản phẩm vào danh mục mới với thứ tự tiếp nối`,
+        affected: totalAffected,
+      };
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
+  }
 
   async findAllWithSearch(search?: string, lang: string = 'vi') {
     const queryBuilder = this.productRepository

@@ -21,9 +21,56 @@ export class CategoriesService {
   /**
    * CREATE: Giữ nguyên logic tính level + xử lý parentId
    */
+  // async create(createCategoryDto: CreateCategoryDto) {
+  //   const { parentId, translations, image } = createCategoryDto;
+
+  //   const queryRunner = this.dataSource.createQueryRunner();
+  //   await queryRunner.connect();
+  //   await queryRunner.startTransaction();
+
+  //   try {
+  //     const newCategory = this.categoryRepository.create({ image });
+
+  //     const currentCount = await queryRunner.manager.count('categories', {
+  //       where: { parentId: parentId ? parentId : IsNull() },
+  //     });
+  //     newCategory.order = currentCount + 1;
+
+  //     // Logic cũ: Tính level dựa trên cha
+  //     if (parentId) {
+  //       const parent = await this.categoryRepository.findOneBy({
+  //         id: parentId,
+  //       });
+  //       if (!parent) throw new NotFoundException('Danh mục cha không tồn tại');
+  //       newCategory.parentId = parentId;
+  //       newCategory.level = parent.level + 1;
+  //     } else {
+  //       newCategory.level = 1;
+  //     }
+
+  //     const savedCategory = await queryRunner.manager.save(newCategory);
+
+  //     // Lưu mảng translations đa ngôn ngữ
+  //     const translationEntities = translations.map(t =>
+  //       this.translationRepository.create({
+  //         ...t,
+  //         categoryId: savedCategory.id,
+  //       })
+  //     );
+  //     await queryRunner.manager.save(translationEntities);
+
+  //     await queryRunner.commitTransaction();
+  //     return savedCategory;
+  //   } catch (err) {
+  //     await queryRunner.rollbackTransaction();
+  //     throw err;
+  //   } finally {
+  //     await queryRunner.release();
+  //   }
+  // }
+
   async create(createCategoryDto: CreateCategoryDto) {
     const { parentId, translations, image } = createCategoryDto;
-
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -31,12 +78,25 @@ export class CategoriesService {
     try {
       const newCategory = this.categoryRepository.create({ image });
 
-      const currentCount = await queryRunner.manager.count('categories', {
-        where: { parentId: parentId ? parentId : IsNull() },
-      });
-      newCategory.order = currentCount + 1;
+      // 1. Tìm giá trị order lớn nhất hiện tại của các danh mục cùng cấp
+      const queryBuilder = queryRunner.manager
+        .createQueryBuilder(Category, 'category')
+        .select('MAX(category.order)', 'maxOrder')
+        .where('category.parentId = :parentId', {
+          parentId: parentId ? parentId : null,
+        });
 
-      // Logic cũ: Tính level dựa trên cha
+      if (!parentId) {
+        queryBuilder.where('category.parentId IS NULL');
+      }
+
+      const result = await queryBuilder.getRawOne();
+      const maxOrder = result.maxOrder ? parseInt(result.maxOrder) : 0;
+
+      // Gán order mới = Max hiện tại + 1
+      newCategory.order = maxOrder + 1;
+
+      // 2. Logic tính Level
       if (parentId) {
         const parent = await this.categoryRepository.findOneBy({
           id: parentId,
@@ -50,7 +110,7 @@ export class CategoriesService {
 
       const savedCategory = await queryRunner.manager.save(newCategory);
 
-      // Lưu mảng translations đa ngôn ngữ
+      // 3. Lưu translations
       const translationEntities = translations.map(t =>
         this.translationRepository.create({
           ...t,
