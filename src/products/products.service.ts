@@ -20,28 +20,60 @@ export class ProductsService {
   //   return await this.productRepository.save(product);
   // }
 
+  // async create(createProductDto: CreateProductDto) {
+  //   const { categoryId, translations, ...productData } = createProductDto;
+
+  //   let nextOrder = 0;
+
+  //   if (categoryId) {
+  //     // Đếm số lượng sản phẩm hiện có trong category này
+  //     // Bạn cũng có thể dùng .maximum('order', { category: { id: categoryId } })
+  //     // nếu muốn lấy số lớn nhất + 1
+  //     nextOrder = await this.productRepository.count({
+  //       where: { category: { id: categoryId } },
+  //     });
+  //   }
+
+  //   const product = this.productRepository.create({
+  //     ...productData,
+  //     order: nextOrder + 1, // Gán số thứ tự mới bằng tổng số lượng (ví dụ có 5 cái 0-4 thì cái mới là 5)
+  //     // category: categoryId ? { id: categoryId } : null,
+  //     category: categoryId ? ({ id: categoryId } as any) : null,
+  //     translations: translations, // TypeORM tự động lưu vào bảng translation nhờ cascade: true
+  //   });
+
+  //   return await this.productRepository.save(product);
+  // }
+
   async create(createProductDto: CreateProductDto) {
     const { categoryId, translations, ...productData } = createProductDto;
 
-    let nextOrder = 0;
+    let nextOrder = 1; // Mặc định nếu chưa có sản phẩm nào thì order là 1
 
     if (categoryId) {
-      // Đếm số lượng sản phẩm hiện có trong category này
-      // Bạn cũng có thể dùng .maximum('order', { category: { id: categoryId } })
-      // nếu muốn lấy số lớn nhất + 1
-      nextOrder = await this.productRepository.count({
-        where: { category: { id: categoryId } },
-      });
+      // 1. Tìm giá trị order lớn nhất hiện tại của sản phẩm trong danh mục này
+      const result = await this.productRepository
+        .createQueryBuilder('product')
+        .select('MAX(product.order)', 'maxOrder')
+        .where('product.categoryId = :categoryId', { categoryId })
+        .getRawOne();
+
+      // 2. Nếu đã có sản phẩm (maxOrder không null), lấy maxOrder + 1
+      if (result && result.maxOrder !== null) {
+        nextOrder = parseInt(result.maxOrder) + 1;
+      }
     }
 
+    // 3. Khởi tạo đối tượng product mới
     const product = this.productRepository.create({
       ...productData,
-      order: nextOrder + 1, // Gán số thứ tự mới bằng tổng số lượng (ví dụ có 5 cái 0-4 thì cái mới là 5)
-      // category: categoryId ? { id: categoryId } : null,
+      order: nextOrder,
       category: categoryId ? ({ id: categoryId } as any) : null,
-      translations: translations, // TypeORM tự động lưu vào bảng translation nhờ cascade: true
+      // TypeORM sẽ tự động lưu vào bảng translation nhờ cascade: true trong Entity
+      translations: translations,
     });
 
+    // 4. Lưu vào database
     return await this.productRepository.save(product);
   }
 
