@@ -222,6 +222,30 @@ export class ProductsService {
   //   };
   // }
 
+  // async findAllPaginated(
+  //   page: number = 1,
+  //   limit: number = 10,
+  //   lang: string = 'vi'
+  // ) {
+  //   const skip = (page - 1) * limit;
+
+  //   const [data, total] = await this.productRepository.findAndCount({
+  //     take: limit,
+  //     skip: skip,
+  //     relations: ['category', 'translations', 'category.translations'], // Load kèm category và cả translations của category
+  //     order: { createdAt: 'DESC' },
+  //   });
+
+  //   // Format lại dữ liệu để trả về tên theo đúng ngôn ngữ yêu cầu (lang)
+  //   const formattedData = data.map(prod => ({
+  //     ...prod,
+  //     displayName:
+  //       prod.translations.find(t => t.languageCode === lang)?.name || prod.id,
+  //   }));
+
+  //   return { data: formattedData, meta: { total, page, limit } };
+  // }
+
   async findAllPaginated(
     page: number = 1,
     limit: number = 10,
@@ -229,21 +253,46 @@ export class ProductsService {
   ) {
     const skip = (page - 1) * limit;
 
+    // 1. Lấy dữ liệu từ Database
     const [data, total] = await this.productRepository.findAndCount({
       take: limit,
       skip: skip,
-      relations: ['category', 'translations', 'category.translations'], // Load kèm category và cả translations của category
+      relations: ['category', 'translations', 'category.translations'],
       order: { createdAt: 'DESC' },
     });
 
-    // Format lại dữ liệu để trả về tên theo đúng ngôn ngữ yêu cầu (lang)
-    const formattedData = data.map(prod => ({
-      ...prod,
-      displayName:
-        prod.translations.find(t => t.languageCode === lang)?.name || prod.id,
-    }));
+    // 2. Cấu hình Domain Proxy (Nên lấy từ ConfigService hoặc .env)
+    const proxyBaseUrl = 'https://gtgsew.com/api/v1/files/proxy-image';
 
-    return { data: formattedData, meta: { total, page, limit } };
+    // 3. Format lại dữ liệu trả về
+    const formattedData = data.map(prod => {
+      // Xử lý mảng ảnh (Nếu prod.images là mảng các string URL)
+      const mappedImages = (prod.images || []).map((imgUrl: string) => {
+        if (imgUrl && imgUrl.includes('viettelidc.com.vn')) {
+          return `${proxyBaseUrl}?url=${encodeURIComponent(imgUrl)}`;
+        }
+        return imgUrl;
+      });
+
+      // Xử lý ảnh đại diện đơn lẻ (nếu có field thumbnail hoặc image riêng)
+      // let finalThumbnail = prod.image;
+      // if (prod.image && prod.image.includes('viettelidc.com.vn')) {
+      //   finalThumbnail = `${proxyBaseUrl}?url=${encodeURIComponent(prod.image)}`;
+      // }
+
+      return {
+        ...prod,
+        // image: finalThumbnail,   // Ảnh chính đã qua proxy
+        images: mappedImages, // Mảng ảnh đã qua proxy
+        displayName:
+          prod.translations.find(t => t.languageCode === lang)?.name || prod.id,
+      };
+    });
+
+    return {
+      data: formattedData,
+      meta: { total, page, limit },
+    };
   }
 
   // async updateCategory(productIds: string[], categoryId: number) {

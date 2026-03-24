@@ -384,18 +384,70 @@ export class CategoriesService {
   /**
    * FIND ONE WITH PRODUCTS: Giữ nguyên logic cũ
    */
-  async findOneWithProducts(id: number) {
+  // async findOneWithProducts(id: number) {
+  //   const category = await this.categoryRepository.findOne({
+  //     where: { id },
+  //     relations: ['products', 'products.translations'],
+  //     order: {
+  //       products: {
+  //         order: 'ASC', // Sắp xếp sản phẩm theo thứ tự tăng dần
+  //         id: 'DESC', // Nếu order bằng nhau (ví dụ đều là 0), ông nào mới hơn (ID lớn hơn) sẽ lên trước
+  //       },
+  //     },
+  //   });
+  //   if (!category) throw new NotFoundException(`Không tìm thấy ID ${id}`);
+  //   return category;
+  // }
+
+  async findOneWithProducts(id: number, lang: string = 'vi') {
     const category = await this.categoryRepository.findOne({
       where: { id },
       relations: ['products', 'products.translations'],
       order: {
         products: {
           order: 'ASC', // Sắp xếp sản phẩm theo thứ tự tăng dần
-          id: 'DESC', // Nếu order bằng nhau (ví dụ đều là 0), ông nào mới hơn (ID lớn hơn) sẽ lên trước
+          id: 'DESC', // Mới hơn lên trước nếu order bằng nhau
         },
       },
     });
-    if (!category) throw new NotFoundException(`Không tìm thấy ID ${id}`);
+
+    if (!category) {
+      throw new NotFoundException(`Không tìm thấy ID ${id}`);
+    }
+
+    // 1. Cấu hình Domain Proxy
+    const proxyBaseUrl = 'https://gtgsew.com/api/v1/files/proxy-image';
+
+    // 2. Biến đổi dữ liệu sản phẩm bên trong Category
+    if (category.products && category.products.length > 0) {
+      category.products = category.products.map(prod => {
+        // Xử lý mảng ảnh chi tiết (images)
+        const mappedImages = (prod.images || []).map((imgUrl: string) => {
+          if (imgUrl && imgUrl.includes('viettelidc.com.vn')) {
+            return `${proxyBaseUrl}?url=${encodeURIComponent(imgUrl)}`;
+          }
+          return imgUrl;
+        });
+
+        // Xử lý ảnh đại diện (image)
+        // let finalImage = prod.image;
+        // if (prod.image && prod.image.includes('viettelidc.com.vn')) {
+        //   finalImage = `${proxyBaseUrl}?url=${encodeURIComponent(prod.image)}`;
+        // }
+
+        // Trả về sản phẩm đã được format
+        return {
+          ...prod,
+          // image: finalImage,
+          images: mappedImages,
+          // Tiện tay format luôn cái tên hiển thị theo ngôn ngữ nếu bạn muốn
+          displayName:
+            prod.translations?.find(t => t.languageCode === lang)?.name ||
+            prod.id,
+        };
+      }) as any; // Cast 'any' nếu Entity khắt khe về kiểu dữ liệu trả về
+    }
+
     return category;
   }
 }
