@@ -12,9 +12,11 @@ import { FilesService } from './files.service';
 import { AllConfigType } from 'src/config/config.type';
 import { Employee } from '../employee/entities/employee.entity';
 import { User } from '../users/entities/user.entity';
+import { HttpModule } from '@nestjs/axios';
 
 @Module({
   imports: [
+    HttpModule,
     TypeOrmModule.forFeature([FileEntity, Employee, User]),
     MulterModule.registerAsync({
       imports: [ConfigModule],

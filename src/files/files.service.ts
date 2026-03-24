@@ -7,6 +7,11 @@ import { Repository } from 'typeorm';
 import { AllConfigType } from 'src/config/config.type';
 import { Employee } from '../employee/entities/employee.entity';
 import { User } from '../users/entities/user.entity';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as crypto from 'crypto';
+import { firstValueFrom } from 'rxjs';
+import { HttpService } from '@nestjs/axios';
 
 @Injectable()
 export class FilesService {
@@ -17,7 +22,8 @@ export class FilesService {
     @InjectRepository(Employee)
     private readonly employeeRepository: Repository<Employee>,
     @InjectRepository(User)
-    private readonly userRepository: Repository<User>
+    private readonly userRepository: Repository<User>,
+    private readonly httpService: HttpService
   ) {}
 
   async uploadFile(
@@ -212,6 +218,53 @@ export class FilesService {
       return savedFile;
     } catch (error) {
       console.error('Error uploading file:', error);
+      throw error;
+    }
+  }
+
+  async getAndCacheImage(
+    targetUrl: string
+  ): Promise<{ filePath: string; contentType: string }> {
+    // 1. Định nghĩa thư mục cache bên trong folder uploads đã map volume
+    const cacheDir = path.join(process.cwd(), 'uploads', 'proxy-cache');
+    if (!fs.existsSync(cacheDir)) {
+      fs.mkdirSync(cacheDir, { recursive: true });
+    }
+
+    // 2. Tạo tên file duy nhất từ URL
+    const fileName = crypto.createHash('md5').update(targetUrl).digest('hex');
+    const filePath = path.join(cacheDir, fileName);
+
+    // 3. Nếu đã có trong cache, trả về thông tin file luôn
+    if (fs.existsSync(filePath)) {
+      // Ở đây có thể dùng thư viện 'mime-types' để lấy contentType chuẩn,
+      // hoặc mặc định image/jpeg vì bạn đang làm ảnh sản phẩm
+      return { filePath, contentType: 'image/jpeg' };
+    }
+
+    // 4. Nếu chưa có, tải từ Viettel IDC qua Proxy
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(targetUrl, {
+          responseType: 'arraybuffer',
+          // Nếu bạn có proxy trung gian (Socks5/Http), hãy cấu hình ở đây
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36...',
+            Referer: 'https://viettelidc.com.vn/',
+          },
+        })
+      );
+
+      // Lưu file vào cache
+      fs.writeFileSync(filePath, response.data);
+
+      return {
+        filePath,
+        contentType: response.headers['content-type'] || 'image/jpeg',
+      };
+    } catch (error) {
+      console.error('Lỗi khi tải ảnh từ Viettel IDC:', error.message);
       throw error;
     }
   }

@@ -10,6 +10,8 @@ import {
   UseInterceptors,
   HttpCode,
   HttpStatus,
+  Query,
+  Res,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import {
@@ -21,6 +23,7 @@ import {
 } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { FilesService } from './files.service';
+import { Response as ExpressRes } from 'express';
 
 @ApiTags('Files')
 @Controller({
@@ -166,5 +169,18 @@ export class FilesController {
   @Get(':path')
   download(@Param('path') path, @Response() response) {
     return response.sendFile(path, { root: './files' });
+  }
+
+  @Get('proxy-image')
+  async proxyImage(@Query('url') url: string, @Res() res: ExpressRes) {
+    try {
+      const { filePath, contentType } =
+        await this.filesService.getAndCacheImage(url);
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=604800'); // Cache trình duyệt 7 ngày
+      return res.sendFile(filePath);
+    } catch (error) {
+      return res.status(404).send('Image not found');
+    }
   }
 }
