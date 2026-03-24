@@ -210,9 +210,79 @@ export class CategoriesService {
   /**
    * UPDATE: Giữ nguyên logic đổi parentId, đổi level và Object.assign
    */
+  // async update(id: number, updateCategoryDto: UpdateCategoryDto) {
+  //   const { parentId, translations, image, order } = updateCategoryDto;
+
+  //   const category = await this.categoryRepository.findOne({
+  //     where: { id },
+  //     relations: ['translations'],
+  //   });
+  //   if (!category) throw new NotFoundException('Danh mục không tồn tại');
+
+  //   const queryRunner = this.dataSource.createQueryRunner();
+  //   await queryRunner.connect();
+  //   await queryRunner.startTransaction();
+
+  //   try {
+  //     // Logic cũ: Xử lý thay đổi cấp độ khi đổi cha
+  //     if (parentId !== undefined) {
+  //       if (parentId === null) {
+  //         category.parentId = null;
+  //         category.level = 1;
+  //       } else {
+  //         const parent = await this.categoryRepository.findOneBy({
+  //           id: parentId,
+  //         });
+  //         if (!parent)
+  //           throw new NotFoundException('Danh mục cha không tồn tại');
+  //         category.parentId = parentId;
+  //         category.level = parent.level + 1;
+  //       }
+  //     }
+
+  //     if (image !== undefined) {
+  //       category.image = image;
+  //     }
+
+  //     if (order !== undefined) {
+  //       category.order = order;
+  //     }
+  //     await queryRunner.manager.save(category);
+
+  //     // Cập nhật đa ngôn ngữ: Nếu có ngôn ngữ mới thì tạo, có rồi thì update
+  //     if (translations) {
+  //       for (const t of translations) {
+  //         let translation = await this.translationRepository.findOne({
+  //           where: { categoryId: id, languageCode: t.languageCode },
+  //         });
+
+  //         if (translation) {
+  //           Object.assign(translation, t);
+  //           await queryRunner.manager.save(translation);
+  //         } else {
+  //           const newTrans = this.translationRepository.create({
+  //             ...t,
+  //             categoryId: id,
+  //           });
+  //           await queryRunner.manager.save(newTrans);
+  //         }
+  //       }
+  //     }
+
+  //     await queryRunner.commitTransaction();
+  //     return this.findOne(id);
+  //   } catch (err) {
+  //     await queryRunner.rollbackTransaction();
+  //     throw err;
+  //   } finally {
+  //     await queryRunner.release();
+  //   }
+  // }
+
   async update(id: number, updateCategoryDto: UpdateCategoryDto) {
     const { parentId, translations, image, order } = updateCategoryDto;
 
+    // 1. Lấy dữ liệu cũ để so sánh
     const category = await this.categoryRepository.findOne({
       where: { id },
       relations: ['translations'],
@@ -224,8 +294,12 @@ export class CategoriesService {
     await queryRunner.startTransaction();
 
     try {
-      // Logic cũ: Xử lý thay đổi cấp độ khi đổi cha
-      if (parentId !== undefined) {
+      // BIẾN KIỂM TRA: Liệu có sự thay đổi về vị trí (cha) không?
+      // Dùng !== undefined để chấp nhận cả trường hợp parentId = null (đưa ra gốc)
+      const isChangingParent =
+        parentId !== undefined && parentId !== category.parentId;
+
+      if (isChangingParent) {
         if (parentId === null) {
           category.parentId = null;
           category.level = 1;
@@ -235,26 +309,44 @@ export class CategoriesService {
           });
           if (!parent)
             throw new NotFoundException('Danh mục cha không tồn tại');
+
           category.parentId = parentId;
           category.level = parent.level + 1;
         }
-      }
 
-      if (image !== undefined) {
-        category.image = image;
-      }
+        // LOGIC QUAN TRỌNG: Tìm Max Order trong số các con của cha mới
+        const result = await queryRunner.manager
+          .createQueryBuilder(Category, 'cat')
+          .select('MAX(cat.order)', 'maxOrder')
+          // Nếu parentId null thì tìm các ông level 1, nếu có parentId thì tìm con của nó
+          .where(
+            parentId ? 'cat.parentId = :parentId' : 'cat.parentId IS NULL',
+            { parentId }
+          )
+          .getRawOne();
 
-      if (order !== undefined) {
+        const maxOrder = result.maxOrder ? parseInt(result.maxOrder) : 0;
+        category.order = maxOrder + 1;
+      }
+      // Nếu không đổi cha nhưng người dùng chủ động truyền order mới (ví dụ sắp xếp thủ công)
+      else if (order !== undefined) {
         category.order = order;
       }
+
+      if (image !== undefined) category.image = image;
+
+      // Lưu category
       await queryRunner.manager.save(category);
 
-      // Cập nhật đa ngôn ngữ: Nếu có ngôn ngữ mới thì tạo, có rồi thì update
+      // 2. Cập nhật translations (Sử dụng queryRunner.manager để đồng bộ transaction)
       if (translations) {
         for (const t of translations) {
-          let translation = await this.translationRepository.findOne({
-            where: { categoryId: id, languageCode: t.languageCode },
-          });
+          let translation = await queryRunner.manager.findOne(
+            CategoryTranslation,
+            {
+              where: { categoryId: id, languageCode: t.languageCode },
+            }
+          );
 
           if (translation) {
             Object.assign(translation, t);
