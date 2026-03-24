@@ -166,11 +166,6 @@ export class FilesController {
     };
   }
 
-  @Get(':path')
-  download(@Param('path') path, @Response() response) {
-    return response.sendFile(path, { root: './files' });
-  }
-
   @Get('proxy-image')
   async proxyImage(@Query('url') url: string, @Res() res: ExpressRes) {
     try {
@@ -182,5 +177,10 @@ export class FilesController {
     } catch (error) {
       return res.status(404).send('Image not found');
     }
+  }
+
+  @Get(':path')
+  download(@Param('path') path, @Response() response) {
+    return response.sendFile(path, { root: './files' });
   }
 }

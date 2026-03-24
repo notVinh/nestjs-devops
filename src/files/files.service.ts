@@ -227,7 +227,7 @@ export class FilesService {
   ): Promise<{ filePath: string; contentType: string }> {
     // 1. Định nghĩa thư mục cache bên trong folder uploads đã map volume
     const cacheDir = path.join(process.cwd(), 'uploads', 'proxy-cache');
-    console.log('--- ĐƯỜNG DẪN CACHE THỰC TẾ TRONG DOCKER ---:', cacheDir);
+
     if (!fs.existsSync(cacheDir)) {
       fs.mkdirSync(cacheDir, { recursive: true });
     }
