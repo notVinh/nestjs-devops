@@ -167,17 +167,82 @@ export class CategoriesService {
   //   };
   // }
 
+  // async findAll() {
+  //   const [data, total] = await this.categoryRepository.findAndCount({
+  //     relations: ['translations', 'products'], // Lấy toàn bộ mảng ngôn ngữ
+  //     order: {
+  //       order: 'ASC', // Sắp xếp theo thứ tự Vinh đã sắp xếp (0, 1, 2...)
+  //       id: 'DESC', // Nếu order bằng nhau, cái nào tạo sau (ID lớn) vẫn hiện lên trước
+  //     }, // Sắp xếp mới nhất lên đầu
+  //   });
+
+  //   return {
+  //     data,
+  //     meta: {
+  //       total,
+  //     },
+  //   };
+  // }
+
   async findAll() {
     const [data, total] = await this.categoryRepository.findAndCount({
-      relations: ['translations', 'products'], // Lấy toàn bộ mảng ngôn ngữ
+      relations: ['translations', 'products', 'products.translations'], // Thêm cả translations của product nếu cần
       order: {
-        order: 'ASC', // Sắp xếp theo thứ tự Vinh đã sắp xếp (0, 1, 2...)
-        id: 'DESC', // Nếu order bằng nhau, cái nào tạo sau (ID lớn) vẫn hiện lên trước
-      }, // Sắp xếp mới nhất lên đầu
+        order: 'ASC',
+        id: 'DESC',
+      },
+    });
+
+    const proxyBaseUrl = 'https://gtgsew.com/api/v1/files/proxy-image';
+
+    const formattedData = data.map(category => {
+      // 1. Xử lý ảnh đại diện của Category (như trong hình image_6cc429.png)
+      let categoryImage = category.image;
+      if (categoryImage && categoryImage.includes('viettelidc.com.vn')) {
+        categoryImage = `${proxyBaseUrl}?url=${encodeURIComponent(
+          categoryImage
+        )}`;
+      }
+
+      // 2. Xử lý danh sách sản phẩm bên trong
+      const mappedProducts = (category.products || []).map((prod: any) => {
+        // Xử lý mảng images của từng sản phẩm
+        const mappedProductImages = (prod.images || []).map(
+          (imgUrl: string) => {
+            if (imgUrl && imgUrl.includes('viettelidc.com.vn')) {
+              return `${proxyBaseUrl}?url=${encodeURIComponent(imgUrl)}`;
+            }
+            return imgUrl;
+          }
+        );
+
+        // Nếu sản phẩm cũng có field 'image' đơn lẻ thì xử lý luôn
+        let productThumbnail = prod.image;
+        if (
+          productThumbnail &&
+          productThumbnail.includes('viettelidc.com.vn')
+        ) {
+          productThumbnail = `${proxyBaseUrl}?url=${encodeURIComponent(
+            productThumbnail
+          )}`;
+        }
+
+        return {
+          ...prod,
+          image: productThumbnail,
+          images: mappedProductImages,
+        };
+      });
+
+      return {
+        ...category,
+        image: categoryImage,
+        products: mappedProducts, // Giờ nó đã là mảng Object có kiểu rõ ràng
+      };
     });
 
     return {
-      data,
+      data: formattedData,
       meta: {
         total,
       },
