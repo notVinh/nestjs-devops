@@ -90,13 +90,55 @@ export class ProductsService {
   //   });
   // }
 
+  // async findOne(id: string) {
+  //   const product = await this.productRepository.findOne({
+  //     where: { id },
+  //     relations: ['category', 'translations'],
+  //   });
+  //   if (!product) throw new NotFoundException(`Máy ${id} không tồn tại`);
+  //   return product;
+  // }
+
   async findOne(id: string) {
     const product = await this.productRepository.findOne({
       where: { id },
       relations: ['category', 'translations'],
     });
+
     if (!product) throw new NotFoundException(`Máy ${id} không tồn tại`);
-    return product;
+
+    const proxyBaseUrl = 'https://gtgsew.com/api/v1/files/proxy-image';
+
+    // 1. Hàm Regex để quét và thay thế link ảnh trong nội dung HTML (Text Editor)
+    const proxyifyHtml = (html: string) => {
+      if (!html) return html;
+      // Tìm các link Viettel IDC nằm trong thuộc tính src="..."
+      const regex = /src="(https:\/\/s3-north1\.viettelidc\.com\.vn\/[^"]+)"/g;
+      return html.replace(regex, (match, p1) => {
+        return `src="${proxyBaseUrl}?url=${encodeURIComponent(p1)}"`;
+      });
+    };
+
+    // 2. Xử lý mảng images (Ảnh slide sản phẩm)
+    const mappedImages = (product.images || []).map((imgUrl: string) => {
+      if (imgUrl && imgUrl.includes('viettelidc.com.vn')) {
+        return `${proxyBaseUrl}?url=${encodeURIComponent(imgUrl)}`;
+      }
+      return imgUrl;
+    });
+
+    // 3. Xử lý nội dung mô tả trong mảng translations
+    const mappedTranslations = (product.translations || []).map(trans => ({
+      ...trans,
+      description: proxyifyHtml(trans.description),
+    }));
+
+    // 4. Trả về object product đã được "Proxy hóa" toàn bộ
+    return {
+      ...product,
+      images: mappedImages,
+      translations: mappedTranslations,
+    };
   }
 
   // async findByCategory(categorySlug: string) {
@@ -458,6 +500,20 @@ export class ProductsService {
     return await queryBuilder.orderBy('product.createdAt', 'DESC').getMany();
   }
 
+  // async findByIds(ids: string[]) {
+  //   if (!ids || ids.length === 0) return [];
+
+  //   const products = await this.productRepository.find({
+  //     where: {
+  //       id: In(ids),
+  //     },
+  //     relations: ['translations', 'category'],
+  //   });
+
+  //   // TypeORM đã tự lọc, nhưng return về để chắc chắn không có phần tử null/undefined
+  //   return products.filter(product => !!product);
+  // }
+
   async findByIds(ids: string[]) {
     if (!ids || ids.length === 0) return [];
 
@@ -468,7 +524,42 @@ export class ProductsService {
       relations: ['translations', 'category'],
     });
 
-    // TypeORM đã tự lọc, nhưng return về để chắc chắn không có phần tử null/undefined
-    return products.filter(product => !!product);
+    const proxyBaseUrl = 'https://gtgsew.com/api/v1/files/proxy-image';
+
+    // Hàm helper để xử lý Regex cho Description
+    const proxyifyHtml = (html: string) => {
+      if (!html) return html;
+      // Regex tìm các link Viettel IDC nằm trong thuộc tính src="..."
+      const regex = /src="(https:\/\/s3-north1\.viettelidc\.com\.vn\/[^"]+)"/g;
+      return html.replace(regex, (match, p1) => {
+        return `src="${proxyBaseUrl}?url=${encodeURIComponent(p1)}"`;
+      });
+    };
+
+    const formattedProducts = products
+      .filter(product => !!product)
+      .map(prod => {
+        // 1. Xử lý mảng images
+        const mappedImages = (prod.images || []).map((imgUrl: string) => {
+          if (imgUrl && imgUrl.includes('viettelidc.com.vn')) {
+            return `${proxyBaseUrl}?url=${encodeURIComponent(imgUrl)}`;
+          }
+          return imgUrl;
+        });
+
+        // 2. Xử lý Descriptions trong mảng translations (Text Editor)
+        const mappedTranslations = (prod.translations || []).map(trans => ({
+          ...trans,
+          description: proxyifyHtml(trans.description),
+        }));
+
+        return {
+          ...prod,
+          images: mappedImages,
+          translations: mappedTranslations,
+        };
+      });
+
+    return formattedProducts;
   }
 }
