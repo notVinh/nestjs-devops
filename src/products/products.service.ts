@@ -474,31 +474,31 @@ export class ProductsService {
     }
   }
 
-  async findAllWithSearch(search?: string, lang: string = 'vi') {
-    const queryBuilder = this.productRepository
-      .createQueryBuilder('product')
-      .leftJoinAndSelect('product.category', 'category')
-      .leftJoinAndSelect('category.translations', 'catTrans')
-      .leftJoinAndSelect('product.translations', 'translation');
+  // async findAllWithSearch(search?: string, lang: string = 'vi') {
+  //   const queryBuilder = this.productRepository
+  //     .createQueryBuilder('product')
+  //     .leftJoinAndSelect('product.category', 'category')
+  //     .leftJoinAndSelect('category.translations', 'catTrans')
+  //     .leftJoinAndSelect('product.translations', 'translation');
 
-    if (search) {
-      // Tìm những ID sản phẩm có tên khớp với từ khóa search ở ngôn ngữ hiện tại
-      queryBuilder.andWhere(qb => {
-        const subQuery = qb
-          .subQuery()
-          .select('pt.productId') // Thay productId bằng tên cột FK trong bảng translation của bạn
-          .from('productTranslations', 'pt') // Thay bằng tên bảng translation trong DB
-          .where('pt.name ILIKE :search')
-          .andWhere('pt.languageCode = :lang')
-          .getQuery();
-        return 'product.id IN ' + subQuery;
-      });
+  //   if (search) {
+  //     // Tìm những ID sản phẩm có tên khớp với từ khóa search ở ngôn ngữ hiện tại
+  //     queryBuilder.andWhere(qb => {
+  //       const subQuery = qb
+  //         .subQuery()
+  //         .select('pt.productId') // Thay productId bằng tên cột FK trong bảng translation của bạn
+  //         .from('productTranslations', 'pt') // Thay bằng tên bảng translation trong DB
+  //         .where('pt.name ILIKE :search')
+  //         .andWhere('pt.languageCode = :lang')
+  //         .getQuery();
+  //       return 'product.id IN ' + subQuery;
+  //     });
 
-      queryBuilder.setParameters({ search: `%${search}%`, lang });
-    }
+  //     queryBuilder.setParameters({ search: `%${search}%`, lang });
+  //   }
 
-    return await queryBuilder.orderBy('product.createdAt', 'DESC').getMany();
-  }
+  //   return await queryBuilder.orderBy('product.createdAt', 'DESC').getMany();
+  // }
 
   // async findByIds(ids: string[]) {
   //   if (!ids || ids.length === 0) return [];
@@ -513,6 +513,90 @@ export class ProductsService {
   //   // TypeORM đã tự lọc, nhưng return về để chắc chắn không có phần tử null/undefined
   //   return products.filter(product => !!product);
   // }
+
+  async findAllWithSearch(search?: string, lang: string = 'vi') {
+    const queryBuilder = this.productRepository
+      .createQueryBuilder('product')
+      .leftJoinAndSelect('product.category', 'category')
+      .leftJoinAndSelect('category.translations', 'catTrans')
+      .leftJoinAndSelect('product.translations', 'translation');
+
+    if (search) {
+      queryBuilder.andWhere(qb => {
+        const subQuery = qb
+          .subQuery()
+          .select('pt.productId')
+          .from('productTranslations', 'pt') // Lưu ý: Check lại tên bảng trong DB của bạn (thường là snake_case)
+          .where('pt.name ILIKE :search')
+          .andWhere('pt.languageCode = :lang')
+          .getQuery();
+        return 'product.id IN ' + subQuery;
+      });
+
+      queryBuilder.setParameters({ search: `%${search}%`, lang });
+    }
+
+    // 1. Lấy dữ liệu thô từ Database
+    const products = await queryBuilder
+      .orderBy('product.createdAt', 'DESC')
+      .getMany();
+
+    // 2. Cấu hình Proxy
+    const proxyBaseUrl = 'https://gtgsew.com/api/v1/files/proxy-image';
+
+    // Helper xử lý ảnh trong nội dung Text Editor
+    const proxyifyHtml = (html: string) => {
+      if (!html) return html;
+      const regex = /src="(https:\/\/s3-north1\.viettelidc\.com\.vn\/[^"]+)"/g;
+      return html.replace(regex, (match, p1) => {
+        return `src="${proxyBaseUrl}?url=${encodeURIComponent(p1)}"`;
+      });
+    };
+
+    // 3. Map lại toàn bộ kết quả để bọc Proxy
+    return products.map(prod => {
+      // Xử lý mảng images sản phẩm
+      const mappedImages = (prod.images || []).map((imgUrl: string) => {
+        if (imgUrl && imgUrl.includes('viettelidc.com.vn')) {
+          return `${proxyBaseUrl}?url=${encodeURIComponent(imgUrl)}`;
+        }
+        return imgUrl;
+      });
+
+      // Xử lý ảnh đại diện đơn lẻ (nếu có)
+      // let finalThumbnail = prod.image;
+      // if (prod.image && prod.image.includes('viettelidc.com.vn')) {
+      //   finalThumbnail = `${proxyBaseUrl}?url=${encodeURIComponent(
+      //     prod.image
+      //   )}`;
+      // }
+
+      // Xử lý ảnh trong category đi kèm (nếu có)
+      if (prod.category) {
+        if (
+          prod.category.image &&
+          prod.category.image.includes('viettelidc.com.vn')
+        ) {
+          prod.category.image = `${proxyBaseUrl}?url=${encodeURIComponent(
+            prod.category.image
+          )}`;
+        }
+      }
+
+      // Xử lý ảnh trong Description của translations
+      const mappedTranslations = (prod.translations || []).map(trans => ({
+        ...trans,
+        description: proxyifyHtml(trans.description),
+      }));
+
+      return {
+        ...prod,
+        // image: finalThumbnail,
+        images: mappedImages,
+        translations: mappedTranslations,
+      };
+    });
+  }
 
   async findByIds(ids: string[]) {
     if (!ids || ids.length === 0) return [];

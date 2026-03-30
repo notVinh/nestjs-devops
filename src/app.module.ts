@@ -54,6 +54,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { CategoriesModule } from './categories/categories.module';
 import { ProductsModule } from './products/products.module';
 import { QuotationModule } from './quotation/quotation.module';
+import { GeneralRequestModule } from './general-request/general-request.module';
 
 @Module({
   imports: [
@@ -138,6 +139,7 @@ import { QuotationModule } from './quotation/quotation.module';
     CategoriesModule,
     ProductsModule,
     QuotationModule,
+    GeneralRequestModule,
   ],
 })
 export class AppModule {}

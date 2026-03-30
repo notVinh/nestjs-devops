@@ -6,9 +6,15 @@ import { EMPLOYEE_PERMISSION } from 'src/employee/constants/employee-permission.
 import { hasEmployeePermission } from 'src/utils/employee-permissions.helper';
 import { PurchaseRequisition } from 'src/purchase-requisition/entities/purchase-requisition.entity';
 import { MisaSaOrder } from '../entities/misa-sa-order.entity';
-import { MisaSaOrderWorkflowHistory, WORKFLOW_ACTION } from '../entities/misa-sa-order-workflow-history.entity';
+import {
+  MisaSaOrderWorkflowHistory,
+  WORKFLOW_ACTION,
+} from '../entities/misa-sa-order-workflow-history.entity';
 import { MisaNotificationHelper } from './misa-notification.helper';
-import { ORDER_WORKFLOW_STATUS, ORDER_WORKFLOW_STATUS_LABELS } from '../constants/workflow.constant';
+import {
+  ORDER_WORKFLOW_STATUS,
+  ORDER_WORKFLOW_STATUS_LABELS,
+} from '../constants/workflow.constant';
 
 /**
  * Service xử lý workflow duyệt đơn hàng
@@ -27,14 +33,16 @@ export class MisaWorkflowService {
     private readonly employeeRepository: Repository<Employee>,
     @InjectRepository(PurchaseRequisition)
     private readonly purchaseRequisitionRepository: Repository<PurchaseRequisition>,
-    private readonly notificationHelper: MisaNotificationHelper,
+    private readonly notificationHelper: MisaNotificationHelper
   ) {}
 
   /**
    * Lấy tên hiển thị của employee
    */
   private getEmployeeName(employee: Employee): string {
-    return employee.user?.fullName || employee.user?.email || `NV #${employee.id}`;
+    return (
+      employee.user?.fullName || employee.user?.email || `NV #${employee.id}`
+    );
   }
 
   /**
@@ -68,7 +76,9 @@ export class MisaWorkflowService {
   /**
    * Lấy lịch sử workflow của đơn hàng
    */
-  async getWorkflowHistory(orderId: number): Promise<MisaSaOrderWorkflowHistory[]> {
+  async getWorkflowHistory(
+    orderId: number
+  ): Promise<MisaSaOrderWorkflowHistory[]> {
     return this.workflowHistoryRepository.find({
       where: { orderId, deletedAt: IsNull() },
       order: { performedAt: 'DESC' },
@@ -85,7 +95,12 @@ export class MisaWorkflowService {
     employeeName: string,
     needsAdditionalOrder?: boolean,
     additionalOrderNote?: string
-  ): Promise<{ success: boolean; message: string; order?: MisaSaOrder; purchaseRequisition?: PurchaseRequisition }> {
+  ): Promise<{
+    success: boolean;
+    message: string;
+    order?: MisaSaOrder;
+    purchaseRequisition?: PurchaseRequisition;
+  }> {
     // Lấy thông tin employee và kiểm tra quyền
     const employee = await this.employeeRepository.findOne({
       where: { id: employeeId },
@@ -97,10 +112,16 @@ export class MisaWorkflowService {
     }
 
     // Kiểm tra quyền submit_order_for_approval
-    if (!hasEmployeePermission(employee, EMPLOYEE_PERMISSION.SUBMIT_ORDER_FOR_APPROVAL)) {
+    if (
+      !hasEmployeePermission(
+        employee,
+        EMPLOYEE_PERMISSION.SUBMIT_ORDER_FOR_APPROVAL
+      )
+    ) {
       return {
         success: false,
-        message: 'Bạn không có quyền gửi duyệt đơn hàng. Vui lòng liên hệ quản trị viên.',
+        message:
+          'Bạn không có quyền gửi duyệt đơn hàng. Vui lòng liên hệ quản trị viên.',
       };
     }
 
@@ -113,7 +134,10 @@ export class MisaWorkflowService {
     }
 
     // Kiểm tra trạng thái hiện tại - cho phép gửi duyệt từ trạng thái draft hoặc rejected
-    if (order.orderWorkflowStatus !== 'draft' && order.orderWorkflowStatus !== 'rejected') {
+    if (
+      order.orderWorkflowStatus !== 'draft' &&
+      order.orderWorkflowStatus !== 'rejected'
+    ) {
       return {
         success: false,
         message: `Không thể gửi duyệt đơn hàng ở trạng thái "${order.orderWorkflowStatus}"`,
@@ -132,17 +156,21 @@ export class MisaWorkflowService {
     if (missingFields.length > 0) {
       return {
         success: false,
-        message: `Vui lòng nhập đầy đủ thông tin trước khi gửi duyệt: ${missingFields.join(', ')}`,
+        message: `Vui lòng nhập đầy đủ thông tin trước khi gửi duyệt: ${missingFields.join(
+          ', '
+        )}`,
       };
     }
 
     // Xác định giá trị needsAdditionalOrder và additionalOrderNote thực tế
-    const finalNeedsAdditionalOrder = needsAdditionalOrder !== undefined
-      ? needsAdditionalOrder
-      : order.needsAdditionalOrder;
-    const finalAdditionalOrderNote = needsAdditionalOrder !== undefined
-      ? additionalOrderNote
-      : order.additionalOrderNote;
+    const finalNeedsAdditionalOrder =
+      needsAdditionalOrder !== undefined
+        ? needsAdditionalOrder
+        : order.needsAdditionalOrder;
+    const finalAdditionalOrderNote =
+      needsAdditionalOrder !== undefined
+        ? additionalOrderNote
+        : order.additionalOrderNote;
 
     // Validate: nếu cần đặt thêm hàng thì phải có ghi chú
     if (finalNeedsAdditionalOrder && !finalAdditionalOrderNote?.trim()) {
@@ -162,7 +190,9 @@ export class MisaWorkflowService {
 
     if (needsAdditionalOrder !== undefined) {
       updateData.needsAdditionalOrder = needsAdditionalOrder;
-      updateData.additionalOrderNote = needsAdditionalOrder ? additionalOrderNote || null : null;
+      updateData.additionalOrderNote = needsAdditionalOrder
+        ? additionalOrderNote || null
+        : null;
     }
 
     await this.saOrderRepository.update(orderId, updateData);
@@ -171,7 +201,9 @@ export class MisaWorkflowService {
     const isResubmit = order.orderWorkflowStatus === 'rejected';
     await this.recordWorkflowHistory({
       orderId,
-      action: isResubmit ? WORKFLOW_ACTION.RESUBMIT_FOR_APPROVAL : WORKFLOW_ACTION.SUBMIT_FOR_APPROVAL,
+      action: isResubmit
+        ? WORKFLOW_ACTION.RESUBMIT_FOR_APPROVAL
+        : WORKFLOW_ACTION.SUBMIT_FOR_APPROVAL,
       fromStatus: order.orderWorkflowStatus,
       toStatus: 'waiting_approval',
       performedByEmployeeId: employeeId,
@@ -183,16 +215,23 @@ export class MisaWorkflowService {
       },
     });
 
-    const updatedOrder = await this.saOrderRepository.findOne({ where: { id: orderId } });
+    const updatedOrder = await this.saOrderRepository.findOne({
+      where: { id: orderId },
+    });
 
     // Gửi thông báo cho những người có quyền approve_order
     if (updatedOrder) {
-      await this.notificationHelper.notifyApproversAboutNewOrder(updatedOrder, employee);
+      await this.notificationHelper.notifyApproversAboutNewOrder(
+        updatedOrder,
+        employee
+      );
     }
 
     return {
       success: true,
-      message: isResubmit ? 'Đã gửi lại đơn hàng để duyệt' : 'Đã gửi đơn hàng để duyệt thành công',
+      message: isResubmit
+        ? 'Đã gửi lại đơn hàng để duyệt'
+        : 'Đã gửi đơn hàng để duyệt thành công',
       order: updatedOrder || undefined,
     };
   }
@@ -221,7 +260,8 @@ export class MisaWorkflowService {
     if (!hasEmployeePermission(employee, EMPLOYEE_PERMISSION.APPROVE_ORDER)) {
       return {
         success: false,
-        message: 'Bạn không có quyền duyệt đơn hàng. Vui lòng liên hệ quản trị viên.',
+        message:
+          'Bạn không có quyền duyệt đơn hàng. Vui lòng liên hệ quản trị viên.',
       };
     }
 
@@ -251,9 +291,13 @@ export class MisaWorkflowService {
 
     const fromStatus = order.orderWorkflowStatus;
     // Khi duyệt, chuyển thẳng sang waiting_export (chờ xuất kho)
-    const toStatus = approved ? ORDER_WORKFLOW_STATUS.WAITING_EXPORT : ORDER_WORKFLOW_STATUS.REJECTED;
+    const toStatus = approved
+      ? ORDER_WORKFLOW_STATUS.WAITING_EXPORT
+      : ORDER_WORKFLOW_STATUS.REJECTED;
 
-    this.logger.log(`[approveOrRejectOrder] Order ${orderId}: ${fromStatus} → ${toStatus} (approved=${approved})`);
+    this.logger.log(
+      `[approveOrRejectOrder] Order ${orderId}: ${fromStatus} → ${toStatus} (approved=${approved})`
+    );
 
     // Cập nhật trạng thái workflow
     await this.saOrderRepository.update(orderId, {
@@ -272,7 +316,9 @@ export class MisaWorkflowService {
       metadata: { approved },
     });
 
-    const updatedOrder = await this.saOrderRepository.findOne({ where: { id: orderId } });
+    const updatedOrder = await this.saOrderRepository.findOne({
+      where: { id: orderId },
+    });
 
     // Nếu duyệt và đơn hàng cần đặt thêm hàng → Tạo ĐXMH
     let purchaseRequisition: PurchaseRequisition | undefined;
@@ -285,7 +331,10 @@ export class MisaWorkflowService {
       );
 
       // Gửi thông báo cho bộ phận mua hàng
-      await this.notificationHelper.notifyPurchasingStaffAboutNewRequisition(updatedOrder, employeeName);
+      await this.notificationHelper.notifyPurchasingStaffAboutNewRequisition(
+        updatedOrder,
+        employeeName
+      );
     }
 
     // Gửi thông báo cho Sale Admin
@@ -299,7 +348,11 @@ export class MisaWorkflowService {
 
     // Gửi thông báo cho workflow subscribers (chỉ khi duyệt)
     if (approved && updatedOrder) {
-      await this.notificationHelper.notifyOrderWorkflowSubscribers(updatedOrder, employeeName, note);
+      await this.notificationHelper.notifyOrderWorkflowSubscribers(
+        updatedOrder,
+        employeeName,
+        note
+      );
     }
 
     return {
@@ -330,8 +383,17 @@ export class MisaWorkflowService {
       return { success: false, message: 'Không tìm thấy thông tin nhân viên' };
     }
 
+    console.log(employee);
+
+    const isInTargetGroup = employee.roleGroups?.some(
+      group => String(group.id) === '1'
+    );
+
     // Kiểm tra quyền (có thể là quản lý hoặc người có quyền giao việc)
-    if (!hasEmployeePermission(employee, EMPLOYEE_PERMISSION.ASSIGN_ORDER_TASK)) {
+    if (
+      !hasEmployeePermission(employee, EMPLOYEE_PERMISSION.ASSIGN_ORDER_TASK) &&
+      !isInTargetGroup
+    ) {
       return {
         success: false,
         message: 'Bạn không có quyền xác nhận hoàn tất đơn hàng.',
@@ -347,10 +409,15 @@ export class MisaWorkflowService {
     }
 
     // Chỉ cho phép xác nhận từ trạng thái pending_completion
-    if (order.orderWorkflowStatus !== ORDER_WORKFLOW_STATUS.PENDING_COMPLETION) {
+    if (
+      order.orderWorkflowStatus !== ORDER_WORKFLOW_STATUS.PENDING_COMPLETION
+    ) {
       return {
         success: false,
-        message: `Không thể xác nhận hoàn tất đơn hàng ở trạng thái "${ORDER_WORKFLOW_STATUS_LABELS[order.orderWorkflowStatus] || order.orderWorkflowStatus}"`,
+        message: `Không thể xác nhận hoàn tất đơn hàng ở trạng thái "${
+          ORDER_WORKFLOW_STATUS_LABELS[order.orderWorkflowStatus] ||
+          order.orderWorkflowStatus
+        }"`,
       };
     }
 
@@ -374,11 +441,16 @@ export class MisaWorkflowService {
       notes: note || null,
     });
 
-    const updatedOrder = await this.saOrderRepository.findOne({ where: { id: orderId } });
+    const updatedOrder = await this.saOrderRepository.findOne({
+      where: { id: orderId },
+    });
 
     // Gửi thông báo cho Sale Admin và workflow subscribers
     if (updatedOrder) {
-      await this.notificationHelper.notifyOrderCompleted(updatedOrder, employeeName);
+      await this.notificationHelper.notifyOrderCompleted(
+        updatedOrder,
+        employeeName
+      );
     }
 
     return {
@@ -405,7 +477,9 @@ export class MisaWorkflowService {
       });
 
       if (existing) {
-        this.logger.warn(`Đề xuất mua hàng đã tồn tại cho đơn hàng ${order.refNo}`);
+        this.logger.warn(
+          `Đề xuất mua hàng đã tồn tại cho đơn hàng ${order.refNo}`
+        );
         return existing;
       }
 
@@ -428,10 +502,14 @@ export class MisaWorkflowService {
 
       const saved = await this.purchaseRequisitionRepository.save(requisition);
 
-      this.logger.log(`Đã tạo và tự động duyệt đề xuất mua hàng ${requisitionNumber} cho đơn hàng ${order.refNo}`);
+      this.logger.log(
+        `Đã tạo và tự động duyệt đề xuất mua hàng ${requisitionNumber} cho đơn hàng ${order.refNo}`
+      );
       return saved;
     } catch (error: any) {
-      this.logger.error(`Lỗi tạo đề xuất mua hàng cho đơn ${order.refNo}: ${error.message}`);
+      this.logger.error(
+        `Lỗi tạo đề xuất mua hàng cho đơn ${order.refNo}: ${error.message}`
+      );
       return undefined;
     }
   }

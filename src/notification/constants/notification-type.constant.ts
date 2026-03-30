@@ -77,6 +77,11 @@ export const NOTIFICATION_TYPE = {
   SUPPORT_REQUEST_DECIDED: 'support_request_decided',
   SUPPORT_REQUEST_REMINDER: 'support_request_reminder',
 
+  // General Request notifications (Yêu cầu chung)
+  GENERAL_REQUEST_CREATED: 'general_request_created',
+  GENERAL_REQUEST_APPROVED: 'general_request_approved',
+  GENERAL_REQUEST_REJECTED: 'general_request_rejected',
+
   // Thêm các types khác khi cần
   // SALARY_UPDATED: 'salary_updated',
 } as const;
