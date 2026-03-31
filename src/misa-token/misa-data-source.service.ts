@@ -49,7 +49,12 @@ export interface SyncResult {
   changedDetails: {
     created: CreatedRecord[];
     updated: ChangedRecord[];
-    merged?: Array<{ code: string; name: string; oldRefId: string; newRefId: string }>;
+    merged?: Array<{
+      code: string;
+      name: string;
+      oldRefId: string;
+      newRefId: string;
+    }>;
     detailUpdated?: Array<{ code: string; name: string }>;
   };
 }
@@ -64,14 +69,20 @@ interface EntityProcessorConfig<T extends ObjectLiteral> {
   entityClass: new () => T;
 }
 
-type SyncLogger = (type: MisaSyncLogEntry['type'], message: string) => Promise<void>;
+type SyncLogger = (
+  type: MisaSyncLogEntry['type'],
+  message: string
+) => Promise<void>;
 
 // ==================== SERVICE ====================
 
 @Injectable()
 export class MisaDataSourceService {
   private readonly logger = new Logger(MisaDataSourceService.name);
-  private dataProcessors!: Map<string, () => Promise<EntityProcessorConfig<any>>>;
+  private dataProcessors!: Map<
+    string,
+    () => Promise<EntityProcessorConfig<any>>
+  >;
 
   constructor(
     @InjectRepository(MisaApiConfig)
@@ -107,13 +118,16 @@ export class MisaDataSourceService {
     private readonly misaApiService: MisaApiService,
     private readonly notificationHelper: MisaNotificationHelper,
     private readonly workflowService: MisaWorkflowService,
-    private readonly assignmentService: MisaAssignmentService,
+    private readonly assignmentService: MisaAssignmentService
   ) {
     this.initDataProcessors();
   }
 
   private initDataProcessors(): void {
-    this.dataProcessors = new Map<string, () => Promise<EntityProcessorConfig<any>>>();
+    this.dataProcessors = new Map<
+      string,
+      () => Promise<EntityProcessorConfig<any>>
+    >();
     this.dataProcessors.set('customer', () => this.getCustomerProcessor());
     this.dataProcessors.set('product', () => this.getProductProcessor());
     this.dataProcessors.set('stock', () => this.getStockProcessor());
@@ -125,7 +139,9 @@ export class MisaDataSourceService {
 
   // ==================== DATA PROCESSOR CONFIGS ====================
 
-  private async getCustomerProcessor(): Promise<EntityProcessorConfig<MisaCustomer>> {
+  private async getCustomerProcessor(): Promise<
+    EntityProcessorConfig<MisaCustomer>
+  > {
     return {
       repository: this.customerRepository,
       uniqueIdField: 'accountObjectId',
@@ -137,7 +153,9 @@ export class MisaDataSourceService {
     };
   }
 
-  private async getProductProcessor(): Promise<EntityProcessorConfig<MisaProduct>> {
+  private async getProductProcessor(): Promise<
+    EntityProcessorConfig<MisaProduct>
+  > {
     return {
       repository: this.productRepository,
       uniqueIdField: 'inventoryItemId',
@@ -161,7 +179,9 @@ export class MisaDataSourceService {
     };
   }
 
-  private async getSaOrderProcessor(): Promise<EntityProcessorConfig<MisaSaOrder>> {
+  private async getSaOrderProcessor(): Promise<
+    EntityProcessorConfig<MisaSaOrder>
+  > {
     return {
       repository: this.saOrderRepository,
       uniqueIdField: 'refId',
@@ -173,7 +193,9 @@ export class MisaDataSourceService {
     };
   }
 
-  private async getPuOrderProcessor(): Promise<EntityProcessorConfig<MisaPuOrder>> {
+  private async getPuOrderProcessor(): Promise<
+    EntityProcessorConfig<MisaPuOrder>
+  > {
     return {
       repository: this.puOrderRepository,
       uniqueIdField: 'refId',
@@ -220,7 +242,11 @@ export class MisaDataSourceService {
     total: number,
     syncStats?: SyncResult
   ): Promise<void> {
-    syncHistory.lastResponseSample = { total, count: records.length, data: records };
+    syncHistory.lastResponseSample = {
+      total,
+      count: records.length,
+      data: records,
+    };
     syncHistory.status = 'success';
     syncHistory.completedAt = new Date();
     syncHistory.totalRecords = total;
@@ -267,10 +293,16 @@ export class MisaDataSourceService {
 
     const apiConfig = await this.getApiConfig();
     if (!apiConfig) {
-      return { success: false, message: 'Chưa cấu hình API MISA. Vui lòng cấu hình trước.' };
+      return {
+        success: false,
+        message: 'Chưa cấu hình API MISA. Vui lòng cấu hình trước.',
+      };
     }
 
-    const { syncHistory, addLog } = await this.createSyncHistoryWithLogger(dataSourceId, dataSource.name);
+    const { syncHistory, addLog } = await this.createSyncHistoryWithLogger(
+      dataSourceId,
+      dataSource.name
+    );
 
     // Get token
     await addLog('info', 'Đang kiểm tra token MISA...');
@@ -284,26 +316,49 @@ export class MisaDataSourceService {
         await addLog('success', 'Làm mới token MISA thành công!');
       } catch (error: any) {
         await addLog('error', `Lỗi làm mới token: ${error.message}`);
-        await this.updateSyncHistoryError(syncHistory, 'Không thể lấy/làm mới token MISA');
-        return { success: false, message: 'Không thể lấy token MISA. Vui lòng thử lại.', syncId: syncHistory.id };
+        await this.updateSyncHistoryError(
+          syncHistory,
+          'Không thể lấy/làm mới token MISA'
+        );
+        return {
+          success: false,
+          message: 'Không thể lấy token MISA. Vui lòng thử lại.',
+          syncId: syncHistory.id,
+        };
       }
     } else {
       await addLog('success', 'Token MISA hợp lệ');
     }
 
     const url = dataSource.apiEndpoint || apiConfig.baseUrl;
-    const requestBody = dataSource.buildRequestBody(1, undefined, undefined, apiConfig.branchId || '');
+    const requestBody = dataSource.buildRequestBody(
+      1,
+      undefined,
+      undefined,
+      apiConfig.branchId || ''
+    );
 
     syncHistory.lastRequest = {
       url,
-      headers: { 'X-MISA-Context': this.misaApiService.buildMisaHeaders(token, apiConfig)['X-MISA-Context'], 'X-Device': apiConfig.deviceId },
+      headers: {
+        'X-MISA-Context': this.misaApiService.buildMisaHeaders(
+          token,
+          apiConfig
+        )['X-MISA-Context'],
+        'X-Device': apiConfig.deviceId,
+      },
       body: requestBody,
     };
     await this.syncHistoryRepository.save(syncHistory);
 
     await addLog('info', `Bắt đầu kéo dữ liệu ${dataSource.name}...`);
 
-    let apiResult = await this.misaApiService.callMisaApi(url, requestBody, token, apiConfig);
+    let apiResult = await this.misaApiService.callMisaApi(
+      url,
+      requestBody,
+      token,
+      apiConfig
+    );
 
     // Retry với token mới nếu lỗi
     if (!apiResult.success && !syncHistory.lastResponseSample?.retried) {
@@ -313,7 +368,12 @@ export class MisaDataSourceService {
         await addLog('success', 'Làm mới token thành công, đang thử lại...');
         syncHistory.lastResponseSample = { retried: true };
         await this.syncHistoryRepository.save(syncHistory);
-        apiResult = await this.misaApiService.callMisaApi(url, requestBody, newToken, apiConfig);
+        apiResult = await this.misaApiService.callMisaApi(
+          url,
+          requestBody,
+          newToken,
+          apiConfig
+        );
       } catch (error: any) {
         await addLog('error', `Không thể làm mới token: ${error.message}`);
       }
@@ -323,33 +383,68 @@ export class MisaDataSourceService {
       const errorMsg = apiResult.error?.message || 'Lỗi không xác định';
       await addLog('error', `MISA API trả về lỗi: ${errorMsg}`);
       await this.updateSyncHistoryError(syncHistory, errorMsg, apiResult.error);
-      return { success: false, message: errorMsg, syncId: syncHistory.id, data: apiResult.error };
+      return {
+        success: false,
+        message: errorMsg,
+        syncId: syncHistory.id,
+        data: apiResult.error,
+      };
     }
 
     const records = apiResult.data || [];
     const total = apiResult.total || 0;
 
-    await addLog('success', `Nhận được ${records.length} bản ghi (tổng: ${total})`);
+    await addLog(
+      'success',
+      `Nhận được ${records.length} bản ghi (tổng: ${total})`
+    );
 
     let syncStats: SyncResult | undefined;
     if (records.length > 0) {
-      syncStats = await this.processRecordsForDataSource(dataSource.code, records, addLog);
+      syncStats = await this.processRecordsForDataSource(
+        dataSource.code,
+        records,
+        addLog
+      );
 
       // Fetch chi tiết cho sa_order
-      if ((dataSource.code === 'sa_order' || dataSource.code === 'sales_order') && syncStats) {
-        const detailResult = await this.fetchSaOrderDetailsAfterSync(records, token, apiConfig, dataSource, addLog, syncStats);
+      if (
+        (dataSource.code === 'sa_order' || dataSource.code === 'sales_order') &&
+        syncStats
+      ) {
+        const detailResult = await this.fetchSaOrderDetailsAfterSync(
+          records,
+          token,
+          apiConfig,
+          dataSource,
+          addLog,
+          syncStats
+        );
         if (detailResult.ordersWithDetailChanges.length > 0) {
           syncStats.detailUpdated = detailResult.ordersWithDetailChanges.length;
-          syncStats.changedDetails.detailUpdated = detailResult.ordersWithDetailChanges;
+          syncStats.changedDetails.detailUpdated =
+            detailResult.ordersWithDetailChanges;
         }
       }
 
       // Fetch chi tiết cho pu_order
-      if ((dataSource.code === 'pu_order' || dataSource.code === 'purchase_order') && syncStats) {
-        const detailResult = await this.fetchPuOrderDetailsAfterSync(records, token, apiConfig, dataSource, addLog, syncStats);
+      if (
+        (dataSource.code === 'pu_order' ||
+          dataSource.code === 'purchase_order') &&
+        syncStats
+      ) {
+        const detailResult = await this.fetchPuOrderDetailsAfterSync(
+          records,
+          token,
+          apiConfig,
+          dataSource,
+          addLog,
+          syncStats
+        );
         if (detailResult.ordersWithDetailChanges.length > 0) {
           syncStats.detailUpdated = detailResult.ordersWithDetailChanges.length;
-          syncStats.changedDetails.detailUpdated = detailResult.ordersWithDetailChanges;
+          syncStats.changedDetails.detailUpdated =
+            detailResult.ordersWithDetailChanges;
         }
       }
     }
@@ -376,7 +471,11 @@ export class MisaDataSourceService {
       const syncResult = await this.saveSaOrders(records);
       await addLog(
         'success',
-        `Đã xử lý ${syncResult.total} đơn hàng: ${syncResult.created} mới, ${syncResult.updated} cập nhật, ${syncResult.unchanged} không đổi${syncResult.errors > 0 ? `, ${syncResult.errors} lỗi` : ''}`
+        `Đã xử lý ${syncResult.total} đơn hàng: ${syncResult.created} mới, ${
+          syncResult.updated
+        } cập nhật, ${syncResult.unchanged} không đổi${
+          syncResult.errors > 0 ? `, ${syncResult.errors} lỗi` : ''
+        }`
       );
       return syncResult;
     }
@@ -392,7 +491,11 @@ export class MisaDataSourceService {
 
     await addLog(
       'success',
-      `Đã xử lý ${syncResult.total} ${processor.entityName}: ${syncResult.created} mới, ${syncResult.updated} cập nhật, ${syncResult.unchanged} không đổi${syncResult.errors > 0 ? `, ${syncResult.errors} lỗi` : ''}`
+      `Đã xử lý ${syncResult.total} ${processor.entityName}: ${
+        syncResult.created
+      } mới, ${syncResult.updated} cập nhật, ${syncResult.unchanged} không đổi${
+        syncResult.errors > 0 ? `, ${syncResult.errors} lỗi` : ''
+      }`
     );
 
     return syncResult;
@@ -416,11 +519,17 @@ export class MisaDataSourceService {
     const validRecords: { data: Partial<T>; code: string; name: string }[] = [];
     for (const record of records) {
       const entityData = config.fromMisaResponse(record);
-      const uniqueId = entityData[config.uniqueIdField as keyof typeof entityData];
-      const code = entityData[config.codeField as keyof typeof entityData] as string;
+      const uniqueId =
+        entityData[config.uniqueIdField as keyof typeof entityData];
+      const code = entityData[
+        config.codeField as keyof typeof entityData
+      ] as string;
 
       if (!uniqueId || !code) {
-        this.logger.warn(`Bỏ qua ${config.entityName} không có ID hoặc mã:`, record);
+        this.logger.warn(
+          `Bỏ qua ${config.entityName} không có ID hoặc mã:`,
+          record
+        );
         result.errors++;
         continue;
       }
@@ -434,21 +543,28 @@ export class MisaDataSourceService {
 
     if (validRecords.length === 0) return result;
 
-    const existingIds = validRecords.map(r => r.data[config.uniqueIdField as keyof typeof r.data]);
+    const existingIds = validRecords.map(
+      r => r.data[config.uniqueIdField as keyof typeof r.data]
+    );
     const existingRecords = await config.repository
       .createQueryBuilder('e')
       .where(`e.${config.uniqueIdField} IN (:...ids)`, { ids: existingIds })
       .getMany();
 
     const existingMap = new Map<string, T>(
-      existingRecords.map(r => [r[config.uniqueIdField as keyof typeof r] as string, r])
+      existingRecords.map(r => [
+        r[config.uniqueIdField as keyof typeof r] as string,
+        r,
+      ])
     );
 
     const toInsert: Partial<T>[] = [];
     const toUpdate: { id: number; data: Partial<T> }[] = [];
 
     for (const { data, code, name } of validRecords) {
-      const uniqueId = data[config.uniqueIdField as keyof typeof data] as string;
+      const uniqueId = data[
+        config.uniqueIdField as keyof typeof data
+      ] as string;
       const existing = existingMap.get(uniqueId);
 
       if (existing) {
@@ -482,10 +598,18 @@ export class MisaDataSourceService {
     for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
       const batch = toInsert.slice(i, i + BATCH_SIZE);
       try {
-        await config.repository.createQueryBuilder().insert().into(config.entityClass).values(batch as any).execute();
+        await config.repository
+          .createQueryBuilder()
+          .insert()
+          .into(config.entityClass)
+          .values(batch as any)
+          .execute();
         result.created += batch.length;
       } catch (error: any) {
-        this.logger.error(`Lỗi bulk insert batch ${i}-${i + batch.length}:`, error.message);
+        this.logger.error(
+          `Lỗi bulk insert batch ${i}-${i + batch.length}:`,
+          error.message
+        );
         result.errors += batch.length;
       }
     }
@@ -502,10 +626,17 @@ export class MisaDataSourceService {
     for (let i = 0; i < toUpdate.length; i += UPDATE_BATCH_SIZE) {
       const batch = toUpdate.slice(i, i + UPDATE_BATCH_SIZE);
       try {
-        await Promise.all(batch.map(item => config.repository.update({ id: item.id } as any, item.data as any)));
+        await Promise.all(
+          batch.map(item =>
+            config.repository.update({ id: item.id } as any, item.data as any)
+          )
+        );
         result.updated += batch.length;
       } catch (error: any) {
-        this.logger.error(`Lỗi bulk update batch ${i}-${i + batch.length}:`, error.message);
+        this.logger.error(
+          `Lỗi bulk update batch ${i}-${i + batch.length}:`,
+          error.message
+        );
         result.errors += batch.length;
       }
     }
@@ -518,11 +649,32 @@ export class MisaDataSourceService {
     incoming: Record<string, any>
   ): Record<string, { old: any; new: any }> | null {
     const ignoreFields = [
-      'id', 'createdAt', 'updatedAt', 'deletedAt', 'editVersion', 'refDate', 'misaCreatedDate',
-      'requestedDeliveryDate', 'actualExportDate', 'goodsStatus', 'machineType', 'region',
-      'priority', 'localDeliveryStatus', 'saleType', 'receiverName', 'receiverPhone',
-      'specificAddress', 'orderWorkflowStatus', 'saleAdminId', 'saleAdminName',
-      'saleAdminSubmittedAt', 'approvedById', 'approvedByName', 'approvedAt', 'approvalNote',
+      'id',
+      'createdAt',
+      'updatedAt',
+      'deletedAt',
+      'editVersion',
+      'refDate',
+      'misaCreatedDate',
+      'requestedDeliveryDate',
+      'actualExportDate',
+      'goodsStatus',
+      'machineType',
+      'region',
+      'priority',
+      'localDeliveryStatus',
+      'saleType',
+      'receiverName',
+      'receiverPhone',
+      'specificAddress',
+      'orderWorkflowStatus',
+      'saleAdminId',
+      'saleAdminName',
+      'saleAdminSubmittedAt',
+      'approvedById',
+      'approvedByName',
+      'approvedAt',
+      'approvalNote',
     ];
     const dateFields = ['misaModifiedDate', 'deliveryDate', 'expectedDate'];
     const changes: Record<string, { old: any; new: any }> = {};
@@ -542,7 +694,10 @@ export class MisaDataSourceService {
         continue;
       }
 
-      if (typeof existingValue === 'object' && typeof incomingValue === 'object') {
+      if (
+        typeof existingValue === 'object' &&
+        typeof incomingValue === 'object'
+      ) {
         if (JSON.stringify(existingValue) !== JSON.stringify(incomingValue)) {
           changes[key] = { old: existingValue, new: incomingValue };
         }
@@ -572,7 +727,9 @@ export class MisaDataSourceService {
         if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
         const dateObj = new Date(d);
         if (isNaN(dateObj.getTime())) return '';
-        return dateObj.toLocaleDateString('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' });
+        return dateObj.toLocaleDateString('sv-SE', {
+          timeZone: 'Asia/Ho_Chi_Minh',
+        });
       };
       return getDateStringVN(date1) === getDateStringVN(date2);
     } catch {
@@ -603,12 +760,17 @@ export class MisaDataSourceService {
     });
   }
 
-  async updateDataSource(id: number, data: Partial<MisaDataSource>): Promise<MisaDataSource> {
+  async updateDataSource(
+    id: number,
+    data: Partial<MisaDataSource>
+  ): Promise<MisaDataSource> {
     await this.dataSourceRepository.update(id, data);
     return this.getDataSourceById(id) as Promise<MisaDataSource>;
   }
 
-  async createDataSource(data: Partial<MisaDataSource>): Promise<MisaDataSource> {
+  async createDataSource(
+    data: Partial<MisaDataSource>
+  ): Promise<MisaDataSource> {
     const maxOrder = await this.dataSourceRepository
       .createQueryBuilder('ds')
       .select('MAX(ds.displayOrder)', 'max')
@@ -623,11 +785,22 @@ export class MisaDataSourceService {
   }
 
   async deleteDataSource(id: number): Promise<void> {
-    await this.dataSourceRepository.update(id, { deletedAt: new Date(), isActive: false });
+    await this.dataSourceRepository.update(id, {
+      deletedAt: new Date(),
+      isActive: false,
+    });
   }
 
-  async updateDisplayOrders(orders: { id: number; displayOrder: number }[]): Promise<void> {
-    await Promise.all(orders.map(item => this.dataSourceRepository.update(item.id, { displayOrder: item.displayOrder })));
+  async updateDisplayOrders(
+    orders: { id: number; displayOrder: number }[]
+  ): Promise<void> {
+    await Promise.all(
+      orders.map(item =>
+        this.dataSourceRepository.update(item.id, {
+          displayOrder: item.displayOrder,
+        })
+      )
+    );
   }
 
   // ==================== API CONFIG ====================
@@ -653,7 +826,11 @@ export class MisaDataSourceService {
 
   // ==================== SYNC HISTORY ====================
 
-  async getSyncHistory(dataSourceId: number, page = 1, limit = 10): Promise<{ data: MisaSyncHistory[]; total: number }> {
+  async getSyncHistory(
+    dataSourceId: number,
+    page = 1,
+    limit = 10
+  ): Promise<{ data: MisaSyncHistory[]; total: number }> {
     const [data, total] = await this.syncHistoryRepository.findAndCount({
       where: { dataSourceId, deletedAt: IsNull() },
       order: { createdAt: 'DESC' },
@@ -664,70 +841,143 @@ export class MisaDataSourceService {
   }
 
   async getSyncHistoryById(syncId: number): Promise<MisaSyncHistory | null> {
-    return this.syncHistoryRepository.findOne({ where: { id: syncId, deletedAt: IsNull() } });
+    return this.syncHistoryRepository.findOne({
+      where: { id: syncId, deletedAt: IsNull() },
+    });
   }
 
   // ==================== TEST FETCH ====================
 
-  async testFetch(dataSourceId: number, pageIndex = 1, pageSize = 20): Promise<{ success: boolean; message: string; data?: any; total?: number }> {
+  async testFetch(
+    dataSourceId: number,
+    pageIndex = 1,
+    pageSize = 20
+  ): Promise<{
+    success: boolean;
+    message: string;
+    data?: any;
+    total?: number;
+  }> {
     const dataSource = await this.getDataSourceById(dataSourceId);
-    if (!dataSource) return { success: false, message: 'Data source not found' };
+    if (!dataSource)
+      return { success: false, message: 'Data source not found' };
 
     const apiConfig = await this.getApiConfig();
-    if (!apiConfig) return { success: false, message: 'Chưa cấu hình API MISA' };
+    if (!apiConfig)
+      return { success: false, message: 'Chưa cấu hình API MISA' };
 
     const token = await this.misaApiService.getToken();
-    if (!token) return { success: false, message: 'Chưa có token MISA. Vui lòng làm mới token.' };
+    if (!token)
+      return {
+        success: false,
+        message: 'Chưa có token MISA. Vui lòng làm mới token.',
+      };
 
     const url = dataSource.apiEndpoint || apiConfig.baseUrl;
-    const requestBody = dataSource.buildRequestBody(pageIndex, undefined, undefined, apiConfig.branchId || '');
+    const requestBody = dataSource.buildRequestBody(
+      pageIndex,
+      undefined,
+      undefined,
+      apiConfig.branchId || ''
+    );
     requestBody.pageSize = pageSize;
 
-    const result = await this.misaApiService.callMisaApi(url, requestBody, token, apiConfig);
+    const result = await this.misaApiService.callMisaApi(
+      url,
+      requestBody,
+      token,
+      apiConfig
+    );
 
     if (!result.success) {
-      return { success: false, message: result.error?.message || 'Lỗi không xác định', data: result.error };
+      return {
+        success: false,
+        message: result.error?.message || 'Lỗi không xác định',
+        data: result.error,
+      };
     }
 
-    return { success: true, message: `Lấy được ${result.data?.length || 0} bản ghi`, data: result.data, total: result.total };
+    return {
+      success: true,
+      message: `Lấy được ${result.data?.length || 0} bản ghi`,
+      data: result.data,
+      total: result.total,
+    };
   }
 
   // ==================== ENTITY-SPECIFIC QUERIES ====================
 
-  async getCustomers(page = 1, limit = 50, search?: string): Promise<{ data: MisaCustomer[]; total: number }> {
-    const qb = this.customerRepository.createQueryBuilder('customer').where('customer.deletedAt IS NULL');
+  async getCustomers(
+    page = 1,
+    limit = 50,
+    search?: string
+  ): Promise<{ data: MisaCustomer[]; total: number }> {
+    const qb = this.customerRepository
+      .createQueryBuilder('customer')
+      .where('customer.deletedAt IS NULL');
     if (search) {
-      qb.andWhere('(customer.accountObjectCode ILIKE :search OR customer.accountObjectName ILIKE :search OR customer.tel ILIKE :search)', { search: `%${search}%` });
+      qb.andWhere(
+        '(customer.accountObjectCode ILIKE :search OR customer.accountObjectName ILIKE :search OR customer.tel ILIKE :search)',
+        { search: `%${search}%` }
+      );
     }
-    qb.orderBy('customer.accountObjectCode', 'ASC').skip((page - 1) * limit).take(limit);
+    qb.orderBy('customer.accountObjectCode', 'ASC')
+      .skip((page - 1) * limit)
+      .take(limit);
     const [data, total] = await qb.getManyAndCount();
     return { data, total };
   }
 
   async getCustomerById(id: number): Promise<MisaCustomer | null> {
-    return this.customerRepository.findOne({ where: { id, deletedAt: IsNull() } });
+    return this.customerRepository.findOne({
+      where: { id, deletedAt: IsNull() },
+    });
   }
 
-  async getProducts(page = 1, limit = 50, search?: string): Promise<{ data: MisaProduct[]; total: number }> {
-    const qb = this.productRepository.createQueryBuilder('product').where('product.deletedAt IS NULL');
+  async getProducts(
+    page = 1,
+    limit = 50,
+    search?: string
+  ): Promise<{ data: MisaProduct[]; total: number }> {
+    const qb = this.productRepository
+      .createQueryBuilder('product')
+      .where('product.deletedAt IS NULL');
     if (search) {
-      qb.andWhere('(product.inventoryItemCode ILIKE :search OR product.inventoryItemName ILIKE :search)', { search: `%${search}%` });
+      qb.andWhere(
+        '(product.inventoryItemCode ILIKE :search OR product.inventoryItemName ILIKE :search)',
+        { search: `%${search}%` }
+      );
     }
-    qb.orderBy('product.inventoryItemCode', 'ASC').skip((page - 1) * limit).take(limit);
+    qb.orderBy('product.inventoryItemCode', 'ASC')
+      .skip((page - 1) * limit)
+      .take(limit);
     const [data, total] = await qb.getManyAndCount();
     return { data, total };
   }
 
   async getProductById(id: number): Promise<MisaProduct | null> {
-    return this.productRepository.findOne({ where: { id, deletedAt: IsNull() } });
+    return this.productRepository.findOne({
+      where: { id, deletedAt: IsNull() },
+    });
   }
 
-  async getStocks(page = 1, limit = 50, search?: string): Promise<{ data: MisaStock[]; total: number }> {
-    const qb = this.stockRepository.createQueryBuilder('stock').where('stock.deletedAt IS NULL');
+  async getStocks(
+    page = 1,
+    limit = 50,
+    search?: string
+  ): Promise<{ data: MisaStock[]; total: number }> {
+    const qb = this.stockRepository
+      .createQueryBuilder('stock')
+      .where('stock.deletedAt IS NULL');
     if (search) {
-      qb.andWhere('(stock.stockCode ILIKE :search OR stock.stockName ILIKE :search)', { search: `%${search}%` });
+      qb.andWhere(
+        '(stock.stockCode ILIKE :search OR stock.stockName ILIKE :search)',
+        { search: `%${search}%` }
+      );
     }
-    qb.orderBy('stock.stockCode', 'ASC').skip((page - 1) * limit).take(limit);
+    qb.orderBy('stock.stockCode', 'ASC')
+      .skip((page - 1) * limit)
+      .take(limit);
     const [data, total] = await qb.getManyAndCount();
     return { data, total };
   }
@@ -738,20 +988,32 @@ export class MisaDataSourceService {
 
   // ==================== SUPPLIER (VENDOR) QUERIES ====================
 
-  async getSuppliers(page = 1, limit = 50, search?: string): Promise<{ data: MisaCustomer[]; total: number }> {
-    const qb = this.customerRepository.createQueryBuilder('customer')
+  async getSuppliers(
+    page = 1,
+    limit = 50,
+    search?: string
+  ): Promise<{ data: MisaCustomer[]; total: number }> {
+    const qb = this.customerRepository
+      .createQueryBuilder('customer')
       .where('customer.deletedAt IS NULL')
       .andWhere('customer.isVendor = :isVendor', { isVendor: true });
     if (search) {
-      qb.andWhere('(customer.accountObjectCode ILIKE :search OR customer.accountObjectName ILIKE :search OR customer.tel ILIKE :search)', { search: `%${search}%` });
+      qb.andWhere(
+        '(customer.accountObjectCode ILIKE :search OR customer.accountObjectName ILIKE :search OR customer.tel ILIKE :search)',
+        { search: `%${search}%` }
+      );
     }
-    qb.orderBy('customer.accountObjectCode', 'ASC').skip((page - 1) * limit).take(limit);
+    qb.orderBy('customer.accountObjectCode', 'ASC')
+      .skip((page - 1) * limit)
+      .take(limit);
     const [data, total] = await qb.getManyAndCount();
     return { data, total };
   }
 
   async getSupplierById(id: number): Promise<MisaCustomer | null> {
-    return this.customerRepository.findOne({ where: { id, isVendor: true, deletedAt: IsNull() } });
+    return this.customerRepository.findOne({
+      where: { id, isVendor: true, deletedAt: IsNull() },
+    });
   }
 
   // ==================== LEGACY SAVE METHODS ====================
@@ -787,14 +1049,24 @@ export class MisaDataSourceService {
       changedDetails: { created: [], updated: [], merged: [] },
     };
 
-    const validRecords: { data: Partial<MisaSaOrder>; refId: string; refNo: string; name: string }[] = [];
+    const validRecords: {
+      data: Partial<MisaSaOrder>;
+      refId: string;
+      refNo: string;
+      name: string;
+    }[] = [];
     for (const record of records) {
       const entityData = MisaSaOrder.fromMisaResponse(record);
       if (!entityData.refId || !entityData.refNo) {
         result.errors++;
         continue;
       }
-      validRecords.push({ data: entityData, refId: entityData.refId, refNo: entityData.refNo, name: entityData.accountObjectName || '' });
+      validRecords.push({
+        data: entityData,
+        refId: entityData.refId,
+        refNo: entityData.refNo,
+        name: entityData.accountObjectName || '',
+      });
     }
 
     if (validRecords.length === 0) return result;
@@ -802,25 +1074,53 @@ export class MisaDataSourceService {
     const refIds = validRecords.map(r => r.refId);
     const refNos = validRecords.map(r => r.refNo);
 
-    const existingByRefId = await this.saOrderRepository.createQueryBuilder('order').where('order.refId IN (:...refIds)', { refIds }).getMany();
-    const refIdMap = new Map<string, MisaSaOrder>(existingByRefId.map(o => [o.refId, o]));
+    const existingByRefId = await this.saOrderRepository
+      .createQueryBuilder('order')
+      .where('order.refId IN (:...refIds)', { refIds })
+      .getMany();
+    const refIdMap = new Map<string, MisaSaOrder>(
+      existingByRefId.map(o => [o.refId, o])
+    );
 
     const manualOrdersByRefNo = await this.saOrderRepository
       .createQueryBuilder('order')
       .where('order.refNo IN (:...refNos)', { refNos })
       .andWhere('order.refId NOT IN (:...refIds)', { refIds })
-      .andWhere('(order.source = :source OR order.source IS NULL)', { source: 'manual' })
+      .andWhere('(order.source = :source OR order.source IS NULL)', {
+        source: 'manual',
+      })
       .getMany();
 
-    const refNoManualMap = new Map<string, MisaSaOrder>(manualOrdersByRefNo.map(o => [o.refNo, o]));
+    const refNoManualMap = new Map<string, MisaSaOrder>(
+      manualOrdersByRefNo.map(o => [o.refNo, o])
+    );
 
     const toInsert: Partial<MisaSaOrder>[] = [];
-    const toUpdate: { id: number; data: Partial<MisaSaOrder>; isMerge: boolean; oldRefId?: string; refNo: string; name: string }[] = [];
+    const toUpdate: {
+      id: number;
+      data: Partial<MisaSaOrder>;
+      isMerge: boolean;
+      oldRefId?: string;
+      refNo: string;
+      name: string;
+    }[] = [];
 
     const localFields: (keyof MisaSaOrder)[] = [
-      'requestedDeliveryDate', 'actualExportDate', 'goodsStatus', 'machineType', 'region',
-      'priority', 'localDeliveryStatus', 'saleType', 'receiverName', 'receiverPhone',
-      'specificAddress', 'orderWorkflowStatus', 'saleAdminId', 'saleAdminName', 'saleAdminSubmittedAt',
+      'requestedDeliveryDate',
+      'actualExportDate',
+      'goodsStatus',
+      'machineType',
+      'region',
+      'priority',
+      'localDeliveryStatus',
+      'saleType',
+      'receiverName',
+      'receiverPhone',
+      'specificAddress',
+      'orderWorkflowStatus',
+      'saleAdminId',
+      'saleAdminName',
+      'saleAdminSubmittedAt',
     ];
 
     for (const { data, refId, refNo, name } of validRecords) {
@@ -843,8 +1143,21 @@ export class MisaDataSourceService {
               if (existing[field] != null) delete updateData[field];
             }
           }
-          toUpdate.push({ id: existing.id, data: updateData, isMerge, oldRefId: isMerge ? existing.refId : undefined, refNo, name });
-          result.changedDetails.updated.push({ code: refNo, name, changes: isMerge ? { _merged: { old: 'manual', new: 'misa' }, ...changes } : changes! });
+          toUpdate.push({
+            id: existing.id,
+            data: updateData,
+            isMerge,
+            oldRefId: isMerge ? existing.refId : undefined,
+            refNo,
+            name,
+          });
+          result.changedDetails.updated.push({
+            code: refNo,
+            name,
+            changes: isMerge
+              ? { _merged: { old: 'manual', new: 'misa' }, ...changes }
+              : changes!,
+          });
         } else {
           result.unchanged++;
         }
@@ -860,10 +1173,18 @@ export class MisaDataSourceService {
       for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
         const batch = toInsert.slice(i, i + BATCH_SIZE);
         try {
-          await this.saOrderRepository.createQueryBuilder().insert().into(MisaSaOrder).values(batch as any).execute();
+          await this.saOrderRepository
+            .createQueryBuilder()
+            .insert()
+            .into(MisaSaOrder)
+            .values(batch as any)
+            .execute();
           result.created += batch.length;
         } catch (error: any) {
-          this.logger.error(`Lỗi bulk insert đơn hàng batch ${i}-${i + batch.length}:`, error.message);
+          this.logger.error(
+            `Lỗi bulk insert đơn hàng batch ${i}-${i + batch.length}:`,
+            error.message
+          );
           result.errors += batch.length;
         }
       }
@@ -873,9 +1194,13 @@ export class MisaDataSourceService {
     for (const item of toUpdate) {
       try {
         if (item.isMerge && item.data.refId) {
-          const currentOrder = await this.saOrderRepository.findOne({ where: { id: item.id } });
+          const currentOrder = await this.saOrderRepository.findOne({
+            where: { id: item.id },
+          });
           if (currentOrder && currentOrder.refId !== item.data.refId) {
-            await this.saOrderDetailRepository.delete({ refId: currentOrder.refId });
+            await this.saOrderDetailRepository.delete({
+              refId: currentOrder.refId,
+            });
           }
         }
         await this.saOrderRepository.update({ id: item.id }, item.data as any);
@@ -883,7 +1208,12 @@ export class MisaDataSourceService {
         if (item.isMerge && item.data.refId) {
           result.merged = (result.merged || 0) + 1;
           result.changedDetails.merged = result.changedDetails.merged || [];
-          result.changedDetails.merged.push({ code: item.refNo, name: item.name, oldRefId: item.oldRefId || '', newRefId: item.data.refId });
+          result.changedDetails.merged.push({
+            code: item.refNo,
+            name: item.name,
+            oldRefId: item.oldRefId || '',
+            newRefId: item.data.refId,
+          });
         }
         result.updated++;
       } catch (error: any) {
@@ -908,13 +1238,20 @@ export class MisaDataSourceService {
     priority?: string,
     region?: string,
     localStatus?: string,
-    province?: string
+    province?: string,
+    sortField?: string, // Thêm tham số này
+    sortOrder: 'ASC' | 'DESC' = 'DESC'
   ): Promise<{ data: MisaSaOrder[]; meta: any }> {
-    const qb = this.saOrderRepository.createQueryBuilder('order').where('order.deletedAt IS NULL');
+    const qb = this.saOrderRepository
+      .createQueryBuilder('order')
+      .where('order.deletedAt IS NULL');
 
     // Search filter
     if (search) {
-      qb.andWhere('(order.refNo ILIKE :search OR order.accountObjectName ILIKE :search OR order.accountObjectCode ILIKE :search)', { search: `%${search}%` });
+      qb.andWhere(
+        '(order.refNo ILIKE :search OR order.accountObjectName ILIKE :search OR order.accountObjectCode ILIKE :search)',
+        { search: `%${search}%` }
+      );
     }
 
     // Date range filter (based on refDate - ngày đơn hàng)
@@ -927,7 +1264,9 @@ export class MisaDataSourceService {
 
     // Workflow status filter
     if (workflowStatus && workflowStatus !== 'all') {
-      qb.andWhere('order.orderWorkflowStatus = :workflowStatus', { workflowStatus });
+      qb.andWhere('order.orderWorkflowStatus = :workflowStatus', {
+        workflowStatus,
+      });
     }
 
     // Source filter (misa or manual)
@@ -952,10 +1291,33 @@ export class MisaDataSourceService {
 
     // Province filter
     if (province) {
-      qb.andWhere('order.province ILIKE :province', { province: `%${province}%` });
+      qb.andWhere('order.province ILIKE :province', {
+        province: `%${province}%`,
+      });
     }
 
-    qb.orderBy('order.refDate', 'DESC').addOrderBy('order.refNo', 'DESC').skip((page - 1) * limit).take(limit);
+    // qb.orderBy('order.refDate', 'DESC').addOrderBy('order.refNo', 'DESC').skip((page - 1) * limit).take(limit);
+
+    // Ưu tiên: Ngày giao hàng -> Ngày xuất kho -> Ngày đơn hàng -> Số chứng từ
+    // qb.orderBy('order.requestedDeliveryDate', 'DESC') // Mới: Ngày giao yêu cầu
+    //   .addOrderBy('order.actualExportDate', 'DESC') // Mới: Ngày xuất kho thực tế
+    //   .addOrderBy('order.refDate', 'DESC') // Cũ
+    //   .addOrderBy('order.refNo', 'DESC'); // Cũ
+
+    // Thay thế đoạn code orderBy cũ bằng:
+    if (sortField) {
+      // Sắp xếp theo yêu cầu từ frontend
+      qb.orderBy(`order.${sortField}`, sortOrder);
+    } else {
+      // Thứ tự mặc định nếu người dùng chưa chọn sắp xếp cụ thể
+      qb.orderBy('order.requestedDeliveryDate', 'DESC')
+        .addOrderBy('order.actualExportDate', 'DESC')
+        .addOrderBy('order.refDate', 'DESC')
+        .addOrderBy('order.refNo', 'DESC');
+    }
+
+    // Phân trang
+    qb.skip((page - 1) * limit).take(limit); // Cũ
     const [data, total] = await qb.getManyAndCount();
 
     const totalPages = Math.ceil(total / limit);
@@ -974,11 +1336,15 @@ export class MisaDataSourceService {
   }
 
   async getSaOrderById(id: number): Promise<MisaSaOrder | null> {
-    return this.saOrderRepository.findOne({ where: { id, deletedAt: IsNull() } });
+    return this.saOrderRepository.findOne({
+      where: { id, deletedAt: IsNull() },
+    });
   }
 
   async getSaOrderByRefId(refId: string): Promise<MisaSaOrder | null> {
-    return this.saOrderRepository.findOne({ where: { refId, deletedAt: IsNull() } });
+    return this.saOrderRepository.findOne({
+      where: { refId, deletedAt: IsNull() },
+    });
   }
 
   async updateSaOrderLocalFields(
@@ -1005,15 +1371,29 @@ export class MisaDataSourceService {
     if (!order) return null;
 
     const hasAdditionalOrderChange =
-      ('needsAdditionalOrder' in data && data.needsAdditionalOrder !== order.needsAdditionalOrder) ||
-      ('additionalOrderNote' in data && data.additionalOrderNote !== order.additionalOrderNote);
+      ('needsAdditionalOrder' in data &&
+        data.needsAdditionalOrder !== order.needsAdditionalOrder) ||
+      ('additionalOrderNote' in data &&
+        data.additionalOrderNote !== order.additionalOrderNote);
 
-    const shouldNotify = hasAdditionalOrderChange && order.orderWorkflowStatus !== 'draft';
+    const shouldNotify =
+      hasAdditionalOrderChange && order.orderWorkflowStatus !== 'draft';
 
     const allowedFields = [
-      'requestedDeliveryDate', 'actualExportDate', 'goodsStatus', 'machineType', 'region',
-      'priority', 'localDeliveryStatus', 'saleType', 'receiverName', 'receiverPhone',
-      'specificAddress', 'province', 'needsAdditionalOrder', 'additionalOrderNote',
+      'requestedDeliveryDate',
+      'actualExportDate',
+      'goodsStatus',
+      'machineType',
+      'region',
+      'priority',
+      'localDeliveryStatus',
+      'saleType',
+      'receiverName',
+      'receiverPhone',
+      'specificAddress',
+      'province',
+      'needsAdditionalOrder',
+      'additionalOrderNote',
     ];
 
     const updateData: Partial<MisaSaOrder> = {};
@@ -1025,48 +1405,73 @@ export class MisaDataSourceService {
     const updatedOrder = await this.getSaOrderById(id);
 
     if (shouldNotify && updatedOrder) {
-      await this.notificationHelper.notifyAdditionalOrderChange(updatedOrder, updatedByName);
+      await this.notificationHelper.notifyAdditionalOrderChange(
+        updatedOrder,
+        updatedByName
+      );
     }
 
     return updatedOrder;
   }
 
   async getSaOrderDetailsByRefId(refId: string): Promise<MisaSaOrderDetail[]> {
-    return this.saOrderDetailRepository.find({ where: { refId, deletedAt: IsNull() }, order: { sortOrder: 'ASC' } });
+    return this.saOrderDetailRepository.find({
+      where: { refId, deletedAt: IsNull() },
+      order: { sortOrder: 'ASC' },
+    });
   }
 
-  async getSaOrderWithDetails(id: number): Promise<{ order: MisaSaOrder | null; details: MisaSaOrderDetail[] }> {
+  async getSaOrderWithDetails(
+    id: number
+  ): Promise<{ order: MisaSaOrder | null; details: MisaSaOrderDetail[] }> {
     const order = await this.getSaOrderById(id);
     if (!order) return { order: null, details: [] };
     const details = await this.getSaOrderDetailsByRefId(order.refId);
     return { order, details };
   }
 
-  async saveSaOrderDetails(refId: string, detailsData: Record<string, any>[]): Promise<{ details: MisaSaOrderDetail[]; hasChanges: boolean; stats: { added: number; removed: number; updated: number } }> {
-    const oldDetails = await this.saOrderDetailRepository.find({ where: { refId } });
+  async saveSaOrderDetails(
+    refId: string,
+    detailsData: Record<string, any>[]
+  ): Promise<{
+    details: MisaSaOrderDetail[];
+    hasChanges: boolean;
+    stats: { added: number; removed: number; updated: number };
+  }> {
+    const oldDetails = await this.saOrderDetailRepository.find({
+      where: { refId },
+    });
     const newDetails: MisaSaOrderDetail[] = [];
 
     for (let i = 0; i < detailsData.length; i++) {
-      const detailEntity = this.saOrderDetailRepository.create(MisaSaOrderDetail.fromMisaResponse(refId, detailsData[i], i));
+      const detailEntity = this.saOrderDetailRepository.create(
+        MisaSaOrderDetail.fromMisaResponse(refId, detailsData[i], i)
+      );
       newDetails.push(detailEntity);
     }
 
     const stats = this.compareDetailChanges(oldDetails, newDetails);
-    const hasChanges = stats.added > 0 || stats.removed > 0 || stats.updated > 0;
+    const hasChanges =
+      stats.added > 0 || stats.removed > 0 || stats.updated > 0;
 
     if (hasChanges) {
       await this.saOrderDetailRepository.delete({ refId });
-      if (newDetails.length > 0) await this.saOrderDetailRepository.save(newDetails);
+      if (newDetails.length > 0)
+        await this.saOrderDetailRepository.save(newDetails);
     }
 
     return { details: newDetails, hasChanges, stats };
   }
 
-  private compareDetailChanges(oldDetails: MisaSaOrderDetail[], newDetails: MisaSaOrderDetail[]): { added: number; removed: number; updated: number } {
+  private compareDetailChanges(
+    oldDetails: MisaSaOrderDetail[],
+    newDetails: MisaSaOrderDetail[]
+  ): { added: number; removed: number; updated: number } {
     const oldMap = new Map<number, MisaSaOrderDetail>();
     for (const d of oldDetails) oldMap.set(d.sortOrder, d);
 
-    let added = 0, updated = 0;
+    let added = 0,
+      updated = 0;
 
     for (const newDetail of newDetails) {
       const oldDetail = oldMap.get(newDetail.sortOrder);
@@ -1081,8 +1486,19 @@ export class MisaDataSourceService {
     return { added, removed: oldMap.size, updated };
   }
 
-  private isDetailChanged(oldDetail: MisaSaOrderDetail, newDetail: MisaSaOrderDetail): boolean {
-    const fieldsToCompare = ['inventoryItemCode', 'description', 'quantity', 'unitPrice', 'amountOc', 'stockCode', 'unitName'];
+  private isDetailChanged(
+    oldDetail: MisaSaOrderDetail,
+    newDetail: MisaSaOrderDetail
+  ): boolean {
+    const fieldsToCompare = [
+      'inventoryItemCode',
+      'description',
+      'quantity',
+      'unitPrice',
+      'amountOc',
+      'stockCode',
+      'unitName',
+    ];
     for (const field of fieldsToCompare) {
       const oldVal = (oldDetail as any)[field];
       const newVal = (newDetail as any)[field];
@@ -1097,31 +1513,85 @@ export class MisaDataSourceService {
 
   private buildSaOrderDetailRequestBody(refId: string): Record<string, any> {
     return {
-      columns: [2157, 1355, 4670, 5274, 3870, 3878, 3876, 5279, 308, 5364, 5350, 3334, 995, 5936, 1122, 1124, 3404, 5476, 5575, 2358],
+      columns: [
+        2157, 1355, 4670, 5274, 3870, 3878, 3876, 5279, 308, 5364, 5350, 3334,
+        995, 5936, 1122, 1124, 3404, 5476, 5575, 2358,
+      ],
       sort: '[{"property":4555,"desc":false,"data_type":4,"operand":1}]',
-      filter: [{ property: 3993, operator: 7, operand: 1, value: refId, data_type: 10 }],
+      filter: [
+        {
+          property: 3993,
+          operator: 7,
+          operand: 1,
+          value: refId,
+          data_type: 10,
+        },
+      ],
       pageIndex: 1,
       pageSize: 50,
       useSp: false,
-      summaryColumns: [3488, 3870, 3878, 3879, 3876, 3877, 2717, 2719, 308, 5350],
+      summaryColumns: [
+        3488, 3870, 3878, 3879, 3876, 3877, 2717, 2719, 308, 5350,
+      ],
       loadMode: 2,
     };
   }
 
-  private async fetchAndSaveSaOrderDetails(refId: string, token: string, apiConfig: MisaApiConfig, detailApiUrl: string): Promise<{ success: boolean; count: number; hasChanges: boolean; error?: string }> {
+  private async fetchAndSaveSaOrderDetails(
+    refId: string,
+    token: string,
+    apiConfig: MisaApiConfig,
+    detailApiUrl: string
+  ): Promise<{
+    success: boolean;
+    count: number;
+    hasChanges: boolean;
+    error?: string;
+  }> {
     try {
-      const orderExists = await this.saOrderRepository.findOne({ where: { refId } });
-      if (!orderExists) return { success: false, count: 0, hasChanges: false, error: 'Order không tồn tại' };
+      const orderExists = await this.saOrderRepository.findOne({
+        where: { refId },
+      });
+      if (!orderExists)
+        return {
+          success: false,
+          count: 0,
+          hasChanges: false,
+          error: 'Order không tồn tại',
+        };
 
       const requestBody = this.buildSaOrderDetailRequestBody(refId);
-      const result = await this.misaApiService.callMisaApi(detailApiUrl, requestBody, token, apiConfig);
+      const result = await this.misaApiService.callMisaApi(
+        detailApiUrl,
+        requestBody,
+        token,
+        apiConfig
+      );
 
-      if (!result.success) return { success: false, count: 0, hasChanges: false, error: result.error?.message };
+      if (!result.success)
+        return {
+          success: false,
+          count: 0,
+          hasChanges: false,
+          error: result.error?.message,
+        };
 
-      const saveResult = await this.saveSaOrderDetails(refId, result.data || []);
-      return { success: true, count: saveResult.details.length, hasChanges: saveResult.hasChanges };
+      const saveResult = await this.saveSaOrderDetails(
+        refId,
+        result.data || []
+      );
+      return {
+        success: true,
+        count: saveResult.details.length,
+        hasChanges: saveResult.hasChanges,
+      };
     } catch (error: any) {
-      return { success: false, count: 0, hasChanges: false, error: error.message };
+      return {
+        success: false,
+        count: 0,
+        hasChanges: false,
+        error: error.message,
+      };
     }
   }
 
@@ -1132,7 +1602,9 @@ export class MisaDataSourceService {
     dataSource: MisaDataSource,
     addLog: SyncLogger,
     syncStats?: SyncResult
-  ): Promise<{ ordersWithDetailChanges: Array<{ code: string; name: string }> }> {
+  ): Promise<{
+    ordersWithDetailChanges: Array<{ code: string; name: string }>;
+  }> {
     const baseUrl = dataSource.apiEndpoint || apiConfig.baseUrl || '';
     const saOrderMatch = baseUrl.match(/(.+\/sa_order)\/.+/);
     let detailApiUrl = '';
@@ -1153,33 +1625,57 @@ export class MisaDataSourceService {
     for (const r of records) {
       if (r.refno && r.refid) {
         refNoToRefId.set(r.refno, r.refid);
-        refIdToOrderInfo.set(r.refid, { code: r.refno, name: r.account_object_name || '' });
+        refIdToOrderInfo.set(r.refid, {
+          code: r.refno,
+          name: r.account_object_name || '',
+        });
       }
     }
 
-    const activeWorkflowStatuses = ['draft', 'waiting_export', 'in_preparation', 'in_delivery', 'in_installation'];
+    const activeWorkflowStatuses = [
+      'draft',
+      'waiting_export',
+      'in_preparation',
+      'in_delivery',
+      'in_installation',
+    ];
     const allRefIds = [...refNoToRefId.values()];
 
     const activeOrders = await this.saOrderRepository
       .createQueryBuilder('order')
-      .select(['order.refId', 'order.refNo', 'order.accountObjectName', 'order.orderWorkflowStatus'])
+      .select([
+        'order.refId',
+        'order.refNo',
+        'order.accountObjectName',
+        'order.orderWorkflowStatus',
+      ])
       .where('order.refId IN (:...refIds)', { refIds: allRefIds })
-      .andWhere('order.orderWorkflowStatus IN (:...statuses)', { statuses: activeWorkflowStatuses })
+      .andWhere('order.orderWorkflowStatus IN (:...statuses)', {
+        statuses: activeWorkflowStatuses,
+      })
       .getMany();
 
     for (const order of activeOrders) {
-      refIdToOrderInfo.set(order.refId, { code: order.refNo, name: order.accountObjectName || '' });
+      refIdToOrderInfo.set(order.refId, {
+        code: order.refNo,
+        name: order.accountObjectName || '',
+      });
     }
 
     const activeRefIds = new Set(activeOrders.map(o => o.refId));
     const refIdsToFetch = new Set<string>();
 
     if (syncStats?.changedDetails) {
-      const createdCodes = new Set(syncStats.changedDetails.created.map(c => c.code));
-      const updatedCodes = new Set(syncStats.changedDetails.updated.map(u => u.code));
+      const createdCodes = new Set(
+        syncStats.changedDetails.created.map(c => c.code)
+      );
+      const updatedCodes = new Set(
+        syncStats.changedDetails.updated.map(u => u.code)
+      );
 
       for (const [refNo, refId] of refNoToRefId) {
-        if (createdCodes.has(refNo) || updatedCodes.has(refNo)) refIdsToFetch.add(refId);
+        if (createdCodes.has(refNo) || updatedCodes.has(refNo))
+          refIdsToFetch.add(refId);
       }
     }
 
@@ -1190,13 +1686,22 @@ export class MisaDataSourceService {
       return { ordersWithDetailChanges: [] };
     }
 
-    await addLog('info', `Bắt đầu lấy chi tiết cho ${refIdsToFetch.size} đơn hàng...`);
+    await addLog(
+      'info',
+      `Bắt đầu lấy chi tiết cho ${refIdsToFetch.size} đơn hàng...`
+    );
 
-    let totalDetails = 0, errors = 0;
+    let totalDetails = 0,
+      errors = 0;
     const ordersWithDetailChanges: Array<{ code: string; name: string }> = [];
 
     for (const refId of refIdsToFetch) {
-      const result = await this.fetchAndSaveSaOrderDetails(refId, token, apiConfig, detailApiUrl);
+      const result = await this.fetchAndSaveSaOrderDetails(
+        refId,
+        token,
+        apiConfig,
+        detailApiUrl
+      );
       if (result.success) {
         totalDetails += result.count;
         if (result.hasChanges) {
@@ -1211,8 +1716,10 @@ export class MisaDataSourceService {
     await addLog(
       errors > 0 ? 'warning' : 'success',
       `Hoàn thành lấy chi tiết: ${totalDetails} dòng từ ${refIdsToFetch.size} đơn` +
-      (ordersWithDetailChanges.length > 0 ? `, ${ordersWithDetailChanges.length} đơn có detail thay đổi` : '') +
-      (errors > 0 ? `, ${errors} lỗi` : '')
+        (ordersWithDetailChanges.length > 0
+          ? `, ${ordersWithDetailChanges.length} đơn có detail thay đổi`
+          : '') +
+        (errors > 0 ? `, ${errors} lỗi` : '')
     );
 
     return { ordersWithDetailChanges };
@@ -1220,14 +1727,26 @@ export class MisaDataSourceService {
 
   // ==================== PU ORDER QUERIES ====================
 
-  async getPuOrders(page = 1, limit = 50, search?: string): Promise<{ data: any[]; total: number }> {
-    const qb = this.puOrderRepository.createQueryBuilder('order').where('order.deletedAt IS NULL');
+  async getPuOrders(
+    page = 1,
+    limit = 50,
+    search?: string
+  ): Promise<{ data: any[]; total: number }> {
+    const qb = this.puOrderRepository
+      .createQueryBuilder('order')
+      .where('order.deletedAt IS NULL');
 
     if (search) {
-      qb.andWhere('(order.refNo ILIKE :search OR order.accountObjectName ILIKE :search OR order.accountObjectCode ILIKE :search)', { search: `%${search}%` });
+      qb.andWhere(
+        '(order.refNo ILIKE :search OR order.accountObjectName ILIKE :search OR order.accountObjectCode ILIKE :search)',
+        { search: `%${search}%` }
+      );
     }
 
-    qb.orderBy('order.refDate', 'DESC').addOrderBy('order.refNo', 'DESC').skip((page - 1) * limit).take(limit);
+    qb.orderBy('order.refDate', 'DESC')
+      .addOrderBy('order.refNo', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
 
     const [orders, total] = await qb.getManyAndCount();
 
@@ -1247,7 +1766,9 @@ export class MisaDataSourceService {
 
     // Merge saOrderRefNo into orders
     const data = orders.map(order => {
-      (order as any).saOrderRefNo = order.saOrderId ? saOrderMap.get(order.saOrderId) || null : null;
+      (order as any).saOrderRefNo = order.saOrderId
+        ? saOrderMap.get(order.saOrderId) || null
+        : null;
       return order;
     });
 
@@ -1255,18 +1776,27 @@ export class MisaDataSourceService {
   }
 
   async getPuOrderById(id: number): Promise<MisaPuOrder | null> {
-    return this.puOrderRepository.findOne({ where: { id, deletedAt: IsNull() } });
+    return this.puOrderRepository.findOne({
+      where: { id, deletedAt: IsNull() },
+    });
   }
 
   async getPuOrderByRefId(refId: string): Promise<MisaPuOrder | null> {
-    return this.puOrderRepository.findOne({ where: { refId, deletedAt: IsNull() } });
+    return this.puOrderRepository.findOne({
+      where: { refId, deletedAt: IsNull() },
+    });
   }
 
   async getPuOrderDetailsByRefId(refId: string): Promise<MisaPuOrderDetail[]> {
-    return this.puOrderDetailRepository.find({ where: { refId, deletedAt: IsNull() }, order: { sortOrder: 'ASC' } });
+    return this.puOrderDetailRepository.find({
+      where: { refId, deletedAt: IsNull() },
+      order: { sortOrder: 'ASC' },
+    });
   }
 
-  async getPuOrderWithDetails(id: number): Promise<{ order: MisaPuOrder | null; details: MisaPuOrderDetail[] }> {
+  async getPuOrderWithDetails(
+    id: number
+  ): Promise<{ order: MisaPuOrder | null; details: MisaPuOrderDetail[] }> {
     const order = await this.getPuOrderById(id);
     if (!order) return { order: null, details: [] };
     const details = await this.getPuOrderDetailsByRefId(order.refId);
@@ -1284,14 +1814,16 @@ export class MisaDataSourceService {
       localNotes?: string | null;
     },
     updatedById?: number,
-    updatedByName?: string,
+    updatedByName?: string
   ): Promise<MisaPuOrder | null> {
     const order = await this.getPuOrderById(id);
     if (!order) return null;
 
     // Update fields
     if (data.expectedArrivalDate !== undefined) {
-      order.expectedArrivalDate = data.expectedArrivalDate ? new Date(data.expectedArrivalDate) : null;
+      order.expectedArrivalDate = data.expectedArrivalDate
+        ? new Date(data.expectedArrivalDate)
+        : null;
       // If expected date is set and status is 'new', change to 'waiting_goods'
       if (order.expectedArrivalDate && order.localStatus === 'new') {
         order.localStatus = 'waiting_goods';
@@ -1325,13 +1857,17 @@ export class MisaDataSourceService {
     id: number,
     confirmedById: number,
     confirmedByName: string,
-    notes?: string,
+    notes?: string
   ): Promise<{ success: boolean; message: string; order?: MisaPuOrder }> {
     const order = await this.getPuOrderById(id);
-    if (!order) return { success: false, message: 'Không tìm thấy đơn mua hàng' };
+    if (!order)
+      return { success: false, message: 'Không tìm thấy đơn mua hàng' };
 
     if (order.localStatus === 'goods_arrived') {
-      return { success: false, message: 'Đơn hàng đã được xác nhận hàng về trước đó' };
+      return {
+        success: false,
+        message: 'Đơn hàng đã được xác nhận hàng về trước đó',
+      };
     }
 
     // Update status
@@ -1340,7 +1876,9 @@ export class MisaDataSourceService {
     order.confirmedById = confirmedById;
     order.confirmedByName = confirmedByName;
     if (notes) {
-      order.localNotes = order.localNotes ? `${order.localNotes}\n[Xác nhận hàng về] ${notes}` : `[Xác nhận hàng về] ${notes}`;
+      order.localNotes = order.localNotes
+        ? `${order.localNotes}\n[Xác nhận hàng về] ${notes}`
+        : `[Xác nhận hàng về] ${notes}`;
     }
 
     await this.puOrderRepository.save(order);
@@ -1359,23 +1897,33 @@ export class MisaDataSourceService {
             status: 'purchase_confirmed',
             purchaseConfirmedByEmployeeId: confirmedById,
             purchaseConfirmedAt: new Date(),
-            purchaseConfirmNotes: notes || `Tự động xác nhận khi hàng về - ${order.refNo}`,
+            purchaseConfirmNotes:
+              notes || `Tự động xác nhận khi hàng về - ${order.refNo}`,
           });
-          this.logger.log(`[PU Order] Tự động xác nhận mua hàng cho DXMH #${requisition.id} khi xác nhận hàng về đơn ${order.refNo}`);
+          this.logger.log(
+            `[PU Order] Tự động xác nhận mua hàng cho DXMH #${requisition.id} khi xác nhận hàng về đơn ${order.refNo}`
+          );
         }
       } catch (e) {
-        this.logger.error(`[PU Order] Lỗi khi tự động xác nhận DXMH #${order.purchaseRequisitionId}: ${e.message}`);
+        this.logger.error(
+          `[PU Order] Lỗi khi tự động xác nhận DXMH #${order.purchaseRequisitionId}: ${e.message}`
+        );
       }
     }
 
     return { success: true, message: 'Đã xác nhận hàng về thành công', order };
   }
 
-  private async sendPuOrderNotification(order: MisaPuOrder, event: 'waiting_goods' | 'goods_arrived'): Promise<void> {
+  private async sendPuOrderNotification(
+    order: MisaPuOrder,
+    event: 'waiting_goods' | 'goods_arrived'
+  ): Promise<void> {
     try {
       // Chỉ gửi thông báo khi có liên kết với DXMH (purchaseRequisitionId)
       if (!order.purchaseRequisitionId) {
-        this.logger.log(`[PU Order] Không gửi thông báo cho đơn ${order.refNo}: DXMH chưa được liên kết`);
+        this.logger.log(
+          `[PU Order] Không gửi thông báo cho đơn ${order.refNo}: DXMH chưa được liên kết`
+        );
         return;
       }
 
@@ -1392,7 +1940,9 @@ export class MisaDataSourceService {
           saOrder,
           order.updatedByName || 'Hệ thống'
         );
-        this.logger.log(`[PU Order] Đã gửi thông báo chờ hàng về cho đơn ${order.refNo}`);
+        this.logger.log(
+          `[PU Order] Đã gửi thông báo chờ hàng về cho đơn ${order.refNo}`
+        );
       } else if (event === 'goods_arrived') {
         // Gửi thông báo khi xác nhận hàng đã về
         await this.notificationHelper.notifyPuOrderGoodsArrived(
@@ -1400,38 +1950,57 @@ export class MisaDataSourceService {
           saOrder,
           order.confirmedByName || 'Hệ thống'
         );
-        this.logger.log(`[PU Order] Đã gửi thông báo hàng đã về cho đơn ${order.refNo}`);
+        this.logger.log(
+          `[PU Order] Đã gửi thông báo hàng đã về cho đơn ${order.refNo}`
+        );
       }
     } catch (error) {
       this.logger.error('Error sending PU order notification:', error);
     }
   }
 
-  async savePuOrderDetails(refId: string, detailsData: Record<string, any>[]): Promise<{ details: MisaPuOrderDetail[]; hasChanges: boolean; stats: { added: number; removed: number; updated: number } }> {
-    const oldDetails = await this.puOrderDetailRepository.find({ where: { refId } });
+  async savePuOrderDetails(
+    refId: string,
+    detailsData: Record<string, any>[]
+  ): Promise<{
+    details: MisaPuOrderDetail[];
+    hasChanges: boolean;
+    stats: { added: number; removed: number; updated: number };
+  }> {
+    const oldDetails = await this.puOrderDetailRepository.find({
+      where: { refId },
+    });
     const newDetails: MisaPuOrderDetail[] = [];
 
     for (let i = 0; i < detailsData.length; i++) {
-      const detailEntity = this.puOrderDetailRepository.create(MisaPuOrderDetail.fromMisaResponse(refId, detailsData[i], i));
+      const detailEntity = this.puOrderDetailRepository.create(
+        MisaPuOrderDetail.fromMisaResponse(refId, detailsData[i], i)
+      );
       newDetails.push(detailEntity);
     }
 
     const stats = this.comparePuDetailChanges(oldDetails, newDetails);
-    const hasChanges = stats.added > 0 || stats.removed > 0 || stats.updated > 0;
+    const hasChanges =
+      stats.added > 0 || stats.removed > 0 || stats.updated > 0;
 
     if (hasChanges) {
       await this.puOrderDetailRepository.delete({ refId });
-      if (newDetails.length > 0) await this.puOrderDetailRepository.save(newDetails);
+      if (newDetails.length > 0)
+        await this.puOrderDetailRepository.save(newDetails);
     }
 
     return { details: newDetails, hasChanges, stats };
   }
 
-  private comparePuDetailChanges(oldDetails: MisaPuOrderDetail[], newDetails: MisaPuOrderDetail[]): { added: number; removed: number; updated: number } {
+  private comparePuDetailChanges(
+    oldDetails: MisaPuOrderDetail[],
+    newDetails: MisaPuOrderDetail[]
+  ): { added: number; removed: number; updated: number } {
     const oldMap = new Map<number, MisaPuOrderDetail>();
     for (const d of oldDetails) oldMap.set(d.sortOrder, d);
 
-    let added = 0, updated = 0;
+    let added = 0,
+      updated = 0;
 
     for (const newDetail of newDetails) {
       const oldDetail = oldMap.get(newDetail.sortOrder);
@@ -1446,8 +2015,20 @@ export class MisaDataSourceService {
     return { added, removed: oldMap.size, updated };
   }
 
-  private isPuDetailChanged(oldDetail: MisaPuOrderDetail, newDetail: MisaPuOrderDetail): boolean {
-    const fieldsToCompare = ['inventoryItemCode', 'description', 'quantity', 'quantityReceipt', 'unitPrice', 'amountOc', 'stockCode', 'unitName'];
+  private isPuDetailChanged(
+    oldDetail: MisaPuOrderDetail,
+    newDetail: MisaPuOrderDetail
+  ): boolean {
+    const fieldsToCompare = [
+      'inventoryItemCode',
+      'description',
+      'quantity',
+      'quantityReceipt',
+      'unitPrice',
+      'amountOc',
+      'stockCode',
+      'unitName',
+    ];
     for (const field of fieldsToCompare) {
       const oldVal = (oldDetail as any)[field];
       const newVal = (newDetail as any)[field];
@@ -1462,9 +2043,19 @@ export class MisaDataSourceService {
 
   private buildPuOrderDetailRequestBody(refId: string): Record<string, any> {
     return {
-      columns: [2157, 1355, 5274, 3870, 3895, 5279, 308, 5364, 5350, 3404, 2358],
+      columns: [
+        2157, 1355, 5274, 3870, 3895, 5279, 308, 5364, 5350, 3404, 2358,
+      ],
       sort: '[{"property":4555,"desc":false,"data_type":4,"operand":1}]',
-      filter: [{ property: 3993, operator: 7, operand: 1, value: refId, data_type: 10 }],
+      filter: [
+        {
+          property: 3993,
+          operator: 7,
+          operand: 1,
+          value: refId,
+          data_type: 10,
+        },
+      ],
       pageIndex: 1,
       pageSize: 50,
       useSp: false,
@@ -1474,20 +2065,61 @@ export class MisaDataSourceService {
     };
   }
 
-  private async fetchAndSavePuOrderDetails(refId: string, token: string, apiConfig: MisaApiConfig, detailApiUrl: string): Promise<{ success: boolean; count: number; hasChanges: boolean; error?: string }> {
+  private async fetchAndSavePuOrderDetails(
+    refId: string,
+    token: string,
+    apiConfig: MisaApiConfig,
+    detailApiUrl: string
+  ): Promise<{
+    success: boolean;
+    count: number;
+    hasChanges: boolean;
+    error?: string;
+  }> {
     try {
-      const orderExists = await this.puOrderRepository.findOne({ where: { refId } });
-      if (!orderExists) return { success: false, count: 0, hasChanges: false, error: 'Order không tồn tại' };
+      const orderExists = await this.puOrderRepository.findOne({
+        where: { refId },
+      });
+      if (!orderExists)
+        return {
+          success: false,
+          count: 0,
+          hasChanges: false,
+          error: 'Order không tồn tại',
+        };
 
       const requestBody = this.buildPuOrderDetailRequestBody(refId);
-      const result = await this.misaApiService.callMisaApi(detailApiUrl, requestBody, token, apiConfig);
+      const result = await this.misaApiService.callMisaApi(
+        detailApiUrl,
+        requestBody,
+        token,
+        apiConfig
+      );
 
-      if (!result.success) return { success: false, count: 0, hasChanges: false, error: result.error?.message };
+      if (!result.success)
+        return {
+          success: false,
+          count: 0,
+          hasChanges: false,
+          error: result.error?.message,
+        };
 
-      const saveResult = await this.savePuOrderDetails(refId, result.data || []);
-      return { success: true, count: saveResult.details.length, hasChanges: saveResult.hasChanges };
+      const saveResult = await this.savePuOrderDetails(
+        refId,
+        result.data || []
+      );
+      return {
+        success: true,
+        count: saveResult.details.length,
+        hasChanges: saveResult.hasChanges,
+      };
     } catch (error: any) {
-      return { success: false, count: 0, hasChanges: false, error: error.message };
+      return {
+        success: false,
+        count: 0,
+        hasChanges: false,
+        error: error.message,
+      };
     }
   }
 
@@ -1498,7 +2130,9 @@ export class MisaDataSourceService {
     dataSource: MisaDataSource,
     addLog: SyncLogger,
     syncStats?: SyncResult
-  ): Promise<{ ordersWithDetailChanges: Array<{ code: string; name: string }> }> {
+  ): Promise<{
+    ordersWithDetailChanges: Array<{ code: string; name: string }>;
+  }> {
     const baseUrl = dataSource.apiEndpoint || apiConfig.baseUrl || '';
     const puOrderMatch = baseUrl.match(/(.+\/pu_order)\/.+/);
     let detailApiUrl = '';
@@ -1510,7 +2144,10 @@ export class MisaDataSourceService {
     }
 
     if (!detailApiUrl) {
-      await addLog('warning', `Không thể xác định URL API chi tiết đơn mua hàng`);
+      await addLog(
+        'warning',
+        `Không thể xác định URL API chi tiết đơn mua hàng`
+      );
       return { ordersWithDetailChanges: [] };
     }
 
@@ -1519,18 +2156,26 @@ export class MisaDataSourceService {
     for (const r of records) {
       if (r.refno && r.refid) {
         refNoToRefId.set(r.refno, r.refid);
-        refIdToOrderInfo.set(r.refid, { code: r.refno, name: r.account_object_name || '' });
+        refIdToOrderInfo.set(r.refid, {
+          code: r.refno,
+          name: r.account_object_name || '',
+        });
       }
     }
 
     const refIdsToFetch = new Set<string>();
 
     if (syncStats?.changedDetails) {
-      const createdCodes = new Set(syncStats.changedDetails.created.map(c => c.code));
-      const updatedCodes = new Set(syncStats.changedDetails.updated.map(u => u.code));
+      const createdCodes = new Set(
+        syncStats.changedDetails.created.map(c => c.code)
+      );
+      const updatedCodes = new Set(
+        syncStats.changedDetails.updated.map(u => u.code)
+      );
 
       for (const [refNo, refId] of refNoToRefId) {
-        if (createdCodes.has(refNo) || updatedCodes.has(refNo)) refIdsToFetch.add(refId);
+        if (createdCodes.has(refNo) || updatedCodes.has(refNo))
+          refIdsToFetch.add(refId);
       }
     }
 
@@ -1546,13 +2191,22 @@ export class MisaDataSourceService {
       return { ordersWithDetailChanges: [] };
     }
 
-    await addLog('info', `Bắt đầu lấy chi tiết cho ${refIdsToFetch.size} đơn mua hàng...`);
+    await addLog(
+      'info',
+      `Bắt đầu lấy chi tiết cho ${refIdsToFetch.size} đơn mua hàng...`
+    );
 
-    let totalDetails = 0, errors = 0;
+    let totalDetails = 0,
+      errors = 0;
     const ordersWithDetailChanges: Array<{ code: string; name: string }> = [];
 
     for (const refId of refIdsToFetch) {
-      const result = await this.fetchAndSavePuOrderDetails(refId, token, apiConfig, detailApiUrl);
+      const result = await this.fetchAndSavePuOrderDetails(
+        refId,
+        token,
+        apiConfig,
+        detailApiUrl
+      );
       if (result.success) {
         totalDetails += result.count;
         if (result.hasChanges) {
@@ -1567,8 +2221,10 @@ export class MisaDataSourceService {
     await addLog(
       errors > 0 ? 'warning' : 'success',
       `Hoàn thành lấy chi tiết: ${totalDetails} dòng từ ${refIdsToFetch.size} đơn mua hàng` +
-      (ordersWithDetailChanges.length > 0 ? `, ${ordersWithDetailChanges.length} đơn có detail thay đổi` : '') +
-      (errors > 0 ? `, ${errors} lỗi` : '')
+        (ordersWithDetailChanges.length > 0
+          ? `, ${ordersWithDetailChanges.length} đơn có detail thay đổi`
+          : '') +
+        (errors > 0 ? `, ${errors} lỗi` : '')
     );
 
     return { ordersWithDetailChanges };
@@ -1603,16 +2259,28 @@ export class MisaDataSourceService {
       unitPrice: number;
       vatRate?: number;
     }>;
-  }): Promise<{ success: boolean; message: string; order?: MisaSaOrder; details?: MisaSaOrderDetail[] }> {
-    const existingOrder = await this.saOrderRepository.findOne({ where: { refNo: data.refNo, deletedAt: IsNull() } });
-    if (existingOrder) return { success: false, message: `Đơn hàng với số ${data.refNo} đã tồn tại trong hệ thống` };
+  }): Promise<{
+    success: boolean;
+    message: string;
+    order?: MisaSaOrder;
+    details?: MisaSaOrderDetail[];
+  }> {
+    const existingOrder = await this.saOrderRepository.findOne({
+      where: { refNo: data.refNo, deletedAt: IsNull() },
+    });
+    if (existingOrder)
+      return {
+        success: false,
+        message: `Đơn hàng với số ${data.refNo} đã tồn tại trong hệ thống`,
+      };
 
-    let totalAmountOc = 0, totalVatAmount = 0;
+    let totalAmountOc = 0,
+      totalVatAmount = 0;
     if (data.details?.length) {
       for (const detail of data.details) {
         const amount = detail.quantity * detail.unitPrice;
         totalAmountOc += amount;
-        totalVatAmount += amount * (detail.vatRate || 0) / 100;
+        totalVatAmount += (amount * (detail.vatRate || 0)) / 100;
       }
     }
 
@@ -1664,14 +2332,19 @@ export class MisaDataSourceService {
             unitPrice: detail.unitPrice,
             amountOc: amount,
             vatRate: detail.vatRate || 0,
-            vatAmountOc: amount * (detail.vatRate || 0) / 100,
+            vatAmountOc: (amount * (detail.vatRate || 0)) / 100,
             sortOrder: index,
           });
         });
         savedDetails = await this.saOrderDetailRepository.save(orderDetails);
       }
 
-      return { success: true, message: `Đã tạo đơn hàng thủ công ${data.refNo}`, order: savedOrder, details: savedDetails };
+      return {
+        success: true,
+        message: `Đã tạo đơn hàng thủ công ${data.refNo}`,
+        order: savedOrder,
+        details: savedDetails,
+      };
     } catch (error: any) {
       return { success: false, message: `Lỗi tạo đơn hàng: ${error.message}` };
     }
@@ -1701,16 +2374,28 @@ export class MisaDataSourceService {
       unitPrice: number;
       vatRate?: number;
     }>;
-  }): Promise<{ success: boolean; message: string; order?: MisaPuOrder; details?: MisaPuOrderDetail[] }> {
-    const existingOrder = await this.puOrderRepository.findOne({ where: { refNo: data.refNo, deletedAt: IsNull() } });
-    if (existingOrder) return { success: false, message: `Đơn mua hàng với số ${data.refNo} đã tồn tại trong hệ thống` };
+  }): Promise<{
+    success: boolean;
+    message: string;
+    order?: MisaPuOrder;
+    details?: MisaPuOrderDetail[];
+  }> {
+    const existingOrder = await this.puOrderRepository.findOne({
+      where: { refNo: data.refNo, deletedAt: IsNull() },
+    });
+    if (existingOrder)
+      return {
+        success: false,
+        message: `Đơn mua hàng với số ${data.refNo} đã tồn tại trong hệ thống`,
+      };
 
-    let totalAmountOc = 0, totalVatAmount = 0;
+    let totalAmountOc = 0,
+      totalVatAmount = 0;
     if (data.details?.length) {
       for (const detail of data.details) {
         const amount = detail.quantity * detail.unitPrice;
         totalAmountOc += amount;
-        totalVatAmount += amount * (detail.vatRate || 0) / 100;
+        totalVatAmount += (amount * (detail.vatRate || 0)) / 100;
       }
     }
 
@@ -1758,16 +2443,24 @@ export class MisaDataSourceService {
             unitPrice: detail.unitPrice,
             amountOc: amount,
             vatRate: detail.vatRate || 0,
-            vatAmountOc: amount * (detail.vatRate || 0) / 100,
+            vatAmountOc: (amount * (detail.vatRate || 0)) / 100,
             sortOrder: index,
           });
         });
         savedDetails = await this.puOrderDetailRepository.save(orderDetails);
       }
 
-      return { success: true, message: `Đã tạo đơn mua hàng thủ công ${data.refNo}`, order: savedOrder, details: savedDetails };
+      return {
+        success: true,
+        message: `Đã tạo đơn mua hàng thủ công ${data.refNo}`,
+        order: savedOrder,
+        details: savedDetails,
+      };
     } catch (error: any) {
-      return { success: false, message: `Lỗi tạo đơn mua hàng: ${error.message}` };
+      return {
+        success: false,
+        message: `Lỗi tạo đơn mua hàng: ${error.message}`,
+      };
     }
   }
 
@@ -1780,7 +2473,13 @@ export class MisaDataSourceService {
     needsAdditionalOrder?: boolean,
     additionalOrderNote?: string
   ) {
-    return this.workflowService.submitOrderForApproval(orderId, employeeId, employeeName, needsAdditionalOrder, additionalOrderNote);
+    return this.workflowService.submitOrderForApproval(
+      orderId,
+      employeeId,
+      employeeName,
+      needsAdditionalOrder,
+      additionalOrderNote
+    );
   }
 
   async approveOrRejectOrder(
@@ -1790,7 +2489,13 @@ export class MisaDataSourceService {
     approved: boolean,
     note?: string
   ) {
-    return this.workflowService.approveOrRejectOrder(orderId, employeeId, employeeName, approved, note);
+    return this.workflowService.approveOrRejectOrder(
+      orderId,
+      employeeId,
+      employeeName,
+      approved,
+      note
+    );
   }
 
   async recordWorkflowHistory(data: {
@@ -1811,7 +2516,11 @@ export class MisaDataSourceService {
   }
 
   async getSaOrdersByWorkflowStatus(status: string, page = 1, limit = 50) {
-    return this.workflowService.getSaOrdersByWorkflowStatus(status, page, limit);
+    return this.workflowService.getSaOrdersByWorkflowStatus(
+      status,
+      page,
+      limit
+    );
   }
 
   // ==================== DELEGATED ASSIGNMENT METHODS ====================
@@ -1839,28 +2548,93 @@ export class MisaDataSourceService {
     return this.assignmentService.startAssignment(assignmentId, employeeId);
   }
 
-  async completeAssignment(assignmentId: number, employeeId: number, data: { completionNotes?: string; attachments?: string[] }) {
-    return this.assignmentService.completeAssignment(assignmentId, employeeId, data);
+  async completeAssignment(
+    assignmentId: number,
+    employeeId: number,
+    data: { completionNotes?: string; attachments?: string[] }
+  ) {
+    return this.assignmentService.completeAssignment(
+      assignmentId,
+      employeeId,
+      data
+    );
   }
 
-  async markAssignmentIncomplete(assignmentId: number, employeeId: number, data: { incompleteReason: string; attachments?: string[] }) {
-    return this.assignmentService.markAssignmentIncomplete(assignmentId, employeeId, data);
+  async markAssignmentIncomplete(
+    assignmentId: number,
+    employeeId: number,
+    data: { incompleteReason: string; attachments?: string[] }
+  ) {
+    return this.assignmentService.markAssignmentIncomplete(
+      assignmentId,
+      employeeId,
+      data
+    );
   }
 
-  async reassignTask(assignmentId: number, reassignById: number, data: { newAssignedToId: number; reassignReason: string; scheduledAt?: Date; notes?: string }) {
-    return this.assignmentService.reassignTask(assignmentId, reassignById, data);
+  async reassignTask(
+    assignmentId: number,
+    reassignById: number,
+    data: {
+      newAssignedToId: number;
+      reassignReason: string;
+      scheduledAt?: Date;
+      notes?: string;
+    }
+  ) {
+    return this.assignmentService.reassignTask(
+      assignmentId,
+      reassignById,
+      data
+    );
   }
 
-  async retryAssignment(assignmentId: number, retryById: number, data: { notes?: string; scheduledAt?: Date }) {
-    return this.assignmentService.retryAssignment(assignmentId, retryById, data);
+  async retryAssignment(
+    assignmentId: number,
+    retryById: number,
+    data: { notes?: string; scheduledAt?: Date }
+  ) {
+    return this.assignmentService.retryAssignment(
+      assignmentId,
+      retryById,
+      data
+    );
   }
 
-  async retryTaskGroup(orderId: number, taskType: string, retryById: number, data: { retryEmployeeIds: number[]; newEmployeeIds: number[]; notes?: string }) {
-    return this.assignmentService.retryTaskGroup(orderId, taskType, retryById, data);
+  async retryTaskGroup(
+    orderId: number,
+    taskType: string,
+    retryById: number,
+    data: {
+      retryEmployeeIds: number[];
+      newEmployeeIds: number[];
+      notes?: string;
+    }
+  ) {
+    return this.assignmentService.retryTaskGroup(
+      orderId,
+      taskType,
+      retryById,
+      data
+    );
   }
 
-  async createDailyReport(assignmentId: number, employeeId: number, data: { status: string; progressPercent?: number; description: string; blockedReason?: string; attachments?: string[] }) {
-    return this.assignmentService.createDailyReport(assignmentId, employeeId, data);
+  async createDailyReport(
+    assignmentId: number,
+    employeeId: number,
+    data: {
+      status: string;
+      progressPercent?: number;
+      description: string;
+      blockedReason?: string;
+      attachments?: string[];
+    }
+  ) {
+    return this.assignmentService.createDailyReport(
+      assignmentId,
+      employeeId,
+      data
+    );
   }
 
   async getReportsByAssignmentId(assignmentId: number) {
@@ -1871,16 +2645,40 @@ export class MisaDataSourceService {
     return this.assignmentService.getReportsByOrderId(orderId);
   }
 
-  async markAssignmentBlocked(assignmentId: number, employeeId: number, data: { blockedReason: string; attachments?: string[] }) {
-    return this.assignmentService.markAssignmentBlocked(assignmentId, employeeId, data);
+  async markAssignmentBlocked(
+    assignmentId: number,
+    employeeId: number,
+    data: { blockedReason: string; attachments?: string[] }
+  ) {
+    return this.assignmentService.markAssignmentBlocked(
+      assignmentId,
+      employeeId,
+      data
+    );
   }
 
-  async resumeAssignment(assignmentId: number, employeeId: number, data?: { notes?: string }) {
-    return this.assignmentService.resumeAssignment(assignmentId, employeeId, data);
+  async resumeAssignment(
+    assignmentId: number,
+    employeeId: number,
+    data?: { notes?: string }
+  ) {
+    return this.assignmentService.resumeAssignment(
+      assignmentId,
+      employeeId,
+      data
+    );
   }
 
-  async confirmOrderCompletion(orderId: number, employeeId: number, note?: string) {
-    return this.workflowService.confirmOrderCompletion(orderId, employeeId, note);
+  async confirmOrderCompletion(
+    orderId: number,
+    employeeId: number,
+    note?: string
+  ) {
+    return this.workflowService.confirmOrderCompletion(
+      orderId,
+      employeeId,
+      note
+    );
   }
 
   async deleteAssignment(assignmentId: number, deletedById: number) {

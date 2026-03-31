@@ -46,7 +46,7 @@ export class MisaDataSourceController {
   constructor(
     private readonly misaDataSourceService: MisaDataSourceService,
     private readonly usersService: UsersService,
-    private readonly employeeService: EmployeeService,
+    private readonly employeeService: EmployeeService
   ) {}
 
   @Get()
@@ -200,7 +200,10 @@ export class MisaDataSourceController {
   ): Promise<BaseResponse<any>> {
     const result = await this.misaDataSourceService.getSyncHistoryById(syncId);
     if (!result) {
-      return ResponseHelper.error('Không tìm thấy lịch sử sync', HTTP_STATUS_CODE.NOT_FOUND);
+      return ResponseHelper.error(
+        'Không tìm thấy lịch sử sync',
+        HTTP_STATUS_CODE.NOT_FOUND
+      );
     }
     return ResponseHelper.success(
       result,
@@ -212,9 +215,7 @@ export class MisaDataSourceController {
   @Post(':id/sync')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Start sync for data source' })
-  async startSync(
-    @Param('id', ParseIntPipe) id: number
-  ): Promise<
+  async startSync(@Param('id', ParseIntPipe) id: number): Promise<
     BaseResponse<{
       success: boolean;
       message: string;
@@ -427,7 +428,8 @@ export class MisaDataSourceController {
   async getPuOrderById(
     @Param('id', ParseIntPipe) id: number
   ): Promise<BaseResponse<any>> {
-    const { order, details } = await this.misaDataSourceService.getPuOrderWithDetails(id);
+    const { order, details } =
+      await this.misaDataSourceService.getPuOrderWithDetails(id);
     const data = order ? { ...order, details } : null;
     return ResponseHelper.success(
       data,
@@ -441,7 +443,9 @@ export class MisaDataSourceController {
   @ApiOperation({ summary: 'Get purchase order with details by ID' })
   async getPuOrderWithDetails(
     @Param('id', ParseIntPipe) id: number
-  ): Promise<BaseResponse<{ order: MisaPuOrder | null; details: MisaPuOrderDetail[] }>> {
+  ): Promise<
+    BaseResponse<{ order: MisaPuOrder | null; details: MisaPuOrderDetail[] }>
+  > {
     const data = await this.misaDataSourceService.getPuOrderWithDetails(id);
     return ResponseHelper.success(
       data,
@@ -456,7 +460,8 @@ export class MisaDataSourceController {
   async updatePuOrderLocalFields(
     @Param('id', ParseIntPipe) id: number,
     @Request() request: any,
-    @Body() data: {
+    @Body()
+    data: {
       expectedArrivalDate?: string | null;
       purchaseRequisitionId?: number | null;
       saOrderId?: number | null;
@@ -484,7 +489,10 @@ export class MisaDataSourceController {
     );
 
     if (!updated) {
-      return ResponseHelper.error('Không tìm thấy đơn mua hàng', HTTP_STATUS_CODE.NOT_FOUND);
+      return ResponseHelper.error(
+        'Không tìm thấy đơn mua hàng',
+        HTTP_STATUS_CODE.NOT_FOUND
+      );
     }
 
     return ResponseHelper.success(
@@ -496,9 +504,12 @@ export class MisaDataSourceController {
 
   @Post('pu-orders/manual')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Tạo đơn mua hàng thủ công khi không thể sync từ MISA' })
+  @ApiOperation({
+    summary: 'Tạo đơn mua hàng thủ công khi không thể sync từ MISA',
+  })
   async createManualPurchaseOrder(
-    @Body() body: {
+    @Body()
+    body: {
       refNo: string;
       refDate?: string;
       // Thông tin nhà cung cấp
@@ -524,9 +535,14 @@ export class MisaDataSourceController {
         vatRate?: number;
       }>;
     }
-  ): Promise<BaseResponse<{ success: boolean; message: string; order?: MisaPuOrder }>> {
+  ): Promise<
+    BaseResponse<{ success: boolean; message: string; order?: MisaPuOrder }>
+  > {
     if (!body.refNo) {
-      return ResponseHelper.error('Số đơn mua hàng (refNo) là bắt buộc', HTTP_STATUS_CODE.BAD_REQUEST);
+      return ResponseHelper.error(
+        'Số đơn mua hàng (refNo) là bắt buộc',
+        HTTP_STATUS_CODE.BAD_REQUEST
+      );
     }
 
     const result = await this.misaDataSourceService.createManualPurchaseOrder({
@@ -538,7 +554,9 @@ export class MisaDataSourceController {
       accountObjectAddress: body.accountObjectAddress,
       accountObjectTaxCode: body.accountObjectTaxCode,
       journalMemo: body.journalMemo,
-      expectedArrivalDate: body.expectedArrivalDate ? new Date(body.expectedArrivalDate) : undefined,
+      expectedArrivalDate: body.expectedArrivalDate
+        ? new Date(body.expectedArrivalDate)
+        : undefined,
       purchaseRequisitionId: body.purchaseRequisitionId,
       saOrderId: body.saOrderId,
       localNotes: body.localNotes,
@@ -559,12 +577,17 @@ export class MisaDataSourceController {
     @Param('id', ParseIntPipe) id: number,
     @Request() request: any,
     @Body() body: { notes?: string }
-  ): Promise<BaseResponse<{ success: boolean; message: string; order?: MisaPuOrder }>> {
+  ): Promise<
+    BaseResponse<{ success: boolean; message: string; order?: MisaPuOrder }>
+  > {
     const userId = request.user?.id;
 
     const employee = await this.employeeService.getEmployeeByUserId(userId);
     if (!employee) {
-      return ResponseHelper.error('Không tìm thấy thông tin nhân viên', HTTP_STATUS_CODE.NOT_FOUND);
+      return ResponseHelper.error(
+        'Không tìm thấy thông tin nhân viên',
+        HTTP_STATUS_CODE.NOT_FOUND
+      );
     }
 
     const user = await this.usersService.findOne({ id: userId });
@@ -600,7 +623,9 @@ export class MisaDataSourceController {
     @Query('priority') priority?: string,
     @Query('region') region?: string,
     @Query('localStatus') localStatus?: string,
-    @Query('province') province?: string
+    @Query('province') province?: string,
+    @Query('sortField') sortField?: string, // Thêm dòng này
+    @Query('sortOrder') sortOrder?: 'ASC' | 'DESC' // Thêm dòng này
   ): Promise<BaseResponse<{ data: MisaSaOrder[]; meta: any }>> {
     const result = await this.misaDataSourceService.getSaOrders(
       +page,
@@ -613,7 +638,9 @@ export class MisaDataSourceController {
       priority,
       region,
       localStatus,
-      province
+      province,
+      sortField, // Thêm
+      sortOrder // Thêm
     );
     return ResponseHelper.success(
       result,
@@ -641,7 +668,9 @@ export class MisaDataSourceController {
   @ApiOperation({ summary: 'Get sales order with details by ID' })
   async getSaOrderWithDetails(
     @Param('id', ParseIntPipe) id: number
-  ): Promise<BaseResponse<{ order: MisaSaOrder | null; details: MisaSaOrderDetail[] }>> {
+  ): Promise<
+    BaseResponse<{ order: MisaSaOrder | null; details: MisaSaOrderDetail[] }>
+  > {
     const data = await this.misaDataSourceService.getSaOrderWithDetails(id);
     return ResponseHelper.success(
       data,
@@ -652,7 +681,9 @@ export class MisaDataSourceController {
 
   @Patch('sa-orders/:id/local-fields')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Update local fields for sales order (Sale Admin/Kế toán)' })
+  @ApiOperation({
+    summary: 'Update local fields for sales order (Sale Admin/Kế toán)',
+  })
   async updateSaOrderLocalFields(
     @Param('id', ParseIntPipe) id: number,
     @Request() request: any,
@@ -682,9 +713,16 @@ export class MisaDataSourceController {
       updatedByName = user?.fullName || undefined;
     }
 
-    const updated = await this.misaDataSourceService.updateSaOrderLocalFields(id, data, updatedByName);
+    const updated = await this.misaDataSourceService.updateSaOrderLocalFields(
+      id,
+      data,
+      updatedByName
+    );
     if (!updated) {
-      return ResponseHelper.error('Không tìm thấy đơn hàng', HTTP_STATUS_CODE.NOT_FOUND);
+      return ResponseHelper.error(
+        'Không tìm thấy đơn hàng',
+        HTTP_STATUS_CODE.NOT_FOUND
+      );
     }
     return ResponseHelper.success(
       updated,
@@ -699,7 +737,8 @@ export class MisaDataSourceController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Tạo đơn hàng thủ công khi không thể sync từ MISA' })
   async createManualOrder(
-    @Body() body: {
+    @Body()
+    body: {
       refNo: string;
       refDate?: string;
       // Thông tin khách hàng
@@ -730,9 +769,14 @@ export class MisaDataSourceController {
         vatRate?: number;
       }>;
     }
-  ): Promise<BaseResponse<{ success: boolean; message: string; order?: MisaSaOrder }>> {
+  ): Promise<
+    BaseResponse<{ success: boolean; message: string; order?: MisaSaOrder }>
+  > {
     if (!body.refNo) {
-      return ResponseHelper.error('Số đơn hàng (refNo) là bắt buộc', HTTP_STATUS_CODE.BAD_REQUEST);
+      return ResponseHelper.error(
+        'Số đơn hàng (refNo) là bắt buộc',
+        HTTP_STATUS_CODE.BAD_REQUEST
+      );
     }
 
     const result = await this.misaDataSourceService.createManualOrder({
@@ -744,7 +788,9 @@ export class MisaDataSourceController {
       accountObjectAddress: body.accountObjectAddress,
       accountObjectTaxCode: body.accountObjectTaxCode,
       journalMemo: body.journalMemo,
-      requestedDeliveryDate: body.requestedDeliveryDate ? new Date(body.requestedDeliveryDate) : undefined,
+      requestedDeliveryDate: body.requestedDeliveryDate
+        ? new Date(body.requestedDeliveryDate)
+        : undefined,
       goodsStatus: body.goodsStatus,
       machineType: body.machineType,
       region: body.region,
@@ -771,14 +817,20 @@ export class MisaDataSourceController {
   async submitOrderForApproval(
     @Param('id', ParseIntPipe) id: number,
     @Request() request: any,
-    @Body() body: { needsAdditionalOrder?: boolean; additionalOrderNote?: string }
-  ): Promise<BaseResponse<{ success: boolean; message: string; order?: MisaSaOrder }>> {
+    @Body()
+    body: { needsAdditionalOrder?: boolean; additionalOrderNote?: string }
+  ): Promise<
+    BaseResponse<{ success: boolean; message: string; order?: MisaSaOrder }>
+  > {
     const userId = request.user.id;
 
     // Lấy employee từ userId
     const employee = await this.employeeService.getEmployeeByUserId(userId);
     if (!employee) {
-      return ResponseHelper.error('Không tìm thấy thông tin nhân viên', HTTP_STATUS_CODE.NOT_FOUND);
+      return ResponseHelper.error(
+        'Không tìm thấy thông tin nhân viên',
+        HTTP_STATUS_CODE.NOT_FOUND
+      );
     }
 
     // Lấy tên nhân viên
@@ -807,13 +859,18 @@ export class MisaDataSourceController {
     @Param('id', ParseIntPipe) id: number,
     @Request() request: any,
     @Body() body: { approved: boolean; note?: string }
-  ): Promise<BaseResponse<{ success: boolean; message: string; order?: MisaSaOrder }>> {
+  ): Promise<
+    BaseResponse<{ success: boolean; message: string; order?: MisaSaOrder }>
+  > {
     const userId = request.user.id;
 
     // Lấy employee từ userId
     const employee = await this.employeeService.getEmployeeByUserId(userId);
     if (!employee) {
-      return ResponseHelper.error('Không tìm thấy thông tin nhân viên', HTTP_STATUS_CODE.NOT_FOUND);
+      return ResponseHelper.error(
+        'Không tìm thấy thông tin nhân viên',
+        HTTP_STATUS_CODE.NOT_FOUND
+      );
     }
 
     // Lấy tên nhân viên
@@ -857,18 +914,25 @@ export class MisaDataSourceController {
 
   @Post('sa-orders/:id/confirm-completion')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Quản lý xác nhận hoàn tất đơn hàng (sau khi lắp đặt xong)' })
+  @ApiOperation({
+    summary: 'Quản lý xác nhận hoàn tất đơn hàng (sau khi lắp đặt xong)',
+  })
   async confirmOrderCompletion(
     @Param('id', ParseIntPipe) id: number,
     @Request() request: any,
     @Body() body: { note?: string }
-  ): Promise<BaseResponse<{ success: boolean; message: string; order?: MisaSaOrder }>> {
+  ): Promise<
+    BaseResponse<{ success: boolean; message: string; order?: MisaSaOrder }>
+  > {
     const userId = request.user.id;
 
     // Lấy employee từ userId
     const employee = await this.employeeService.getEmployeeByUserId(userId);
     if (!employee) {
-      return ResponseHelper.error('Không tìm thấy thông tin nhân viên', HTTP_STATUS_CODE.NOT_FOUND);
+      return ResponseHelper.error(
+        'Không tìm thấy thông tin nhân viên',
+        HTTP_STATUS_CODE.NOT_FOUND
+      );
     }
 
     const result = await this.misaDataSourceService.confirmOrderCompletion(
@@ -888,23 +952,31 @@ export class MisaDataSourceController {
 
   @Post('sa-orders/:id/assignments')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Giao việc cho đơn hàng (hỗ trợ single hoặc multiple employees)' })
+  @ApiOperation({
+    summary: 'Giao việc cho đơn hàng (hỗ trợ single hoặc multiple employees)',
+  })
   async createAssignment(
     @Param('id', ParseIntPipe) orderId: number,
     @Request() request: any,
-    @Body() body: CreateAssignmentDto,
+    @Body() body: CreateAssignmentDto
   ): Promise<BaseResponse<any>> {
     const userId = request.user.id;
 
     const employee = await this.employeeService.getEmployeeByUserId(userId);
     if (!employee) {
-      return ResponseHelper.error('Không tìm thấy thông tin nhân viên', HTTP_STATUS_CODE.NOT_FOUND);
+      return ResponseHelper.error(
+        'Không tìm thấy thông tin nhân viên',
+        HTTP_STATUS_CODE.NOT_FOUND
+      );
     }
 
     // Get all employee IDs to assign
     const assignedToIds = body.getAssignedToIds();
     if (assignedToIds.length === 0) {
-      return ResponseHelper.error('Vui lòng chọn ít nhất 1 nhân viên để giao việc', HTTP_STATUS_CODE.BAD_REQUEST);
+      return ResponseHelper.error(
+        'Vui lòng chọn ít nhất 1 nhân viên để giao việc',
+        HTTP_STATUS_CODE.BAD_REQUEST
+      );
     }
 
     // Create assignments for all employees
@@ -932,19 +1004,23 @@ export class MisaDataSourceController {
     if (results.length === 0) {
       return ResponseHelper.error(
         errors.join('; ') || 'Không thể giao việc',
-        HTTP_STATUS_CODE.BAD_REQUEST,
+        HTTP_STATUS_CODE.BAD_REQUEST
       );
     }
 
     // If some failed, include warning
-    const message = errors.length > 0
-      ? `Đã giao việc cho ${results.length}/${assignedToIds.length} nhân viên. Lỗi: ${errors.join('; ')}`
-      : `Đã giao việc cho ${results.length} nhân viên`;
+    const message =
+      errors.length > 0
+        ? `Đã giao việc cho ${results.length}/${
+            assignedToIds.length
+          } nhân viên. Lỗi: ${errors.join('; ')}`
+        : `Đã giao việc cho ${results.length} nhân viên`;
 
     // Return single assignment if only one, array if multiple
-    const data = results.length === 1
-      ? { success: true, assignment: results[0], message }
-      : { success: true, assignments: results, message };
+    const data =
+      results.length === 1
+        ? { success: true, assignment: results[0], message }
+        : { success: true, assignments: results, message };
 
     return ResponseHelper.success(data, message, HTTP_STATUS_CODE.OK);
   }
@@ -955,7 +1031,8 @@ export class MisaDataSourceController {
   async getAssignmentsByOrderId(
     @Param('id', ParseIntPipe) orderId: number
   ): Promise<BaseResponse<any>> {
-    const assignments = await this.misaDataSourceService.getAssignmentsByOrderId(orderId);
+    const assignments =
+      await this.misaDataSourceService.getAssignmentsByOrderId(orderId);
     return ResponseHelper.success(
       assignments,
       'Lấy danh sách công việc thành công',
@@ -974,10 +1051,16 @@ export class MisaDataSourceController {
 
     const employee = await this.employeeService.getEmployeeByUserId(userId);
     if (!employee) {
-      return ResponseHelper.error('Không tìm thấy thông tin nhân viên', HTTP_STATUS_CODE.NOT_FOUND);
+      return ResponseHelper.error(
+        'Không tìm thấy thông tin nhân viên',
+        HTTP_STATUS_CODE.NOT_FOUND
+      );
     }
 
-    const result = await this.misaDataSourceService.startAssignment(assignmentId, +employee.id);
+    const result = await this.misaDataSourceService.startAssignment(
+      assignmentId,
+      +employee.id
+    );
 
     if (!result.success) {
       return ResponseHelper.error(result.message, HTTP_STATUS_CODE.BAD_REQUEST);
@@ -992,7 +1075,8 @@ export class MisaDataSourceController {
   async completeAssignment(
     @Param('id', ParseIntPipe) assignmentId: number,
     @Request() request: any,
-    @Body() body: {
+    @Body()
+    body: {
       completionNotes?: string;
       attachments?: string[];
     }
@@ -1001,7 +1085,10 @@ export class MisaDataSourceController {
 
     const employee = await this.employeeService.getEmployeeByUserId(userId);
     if (!employee) {
-      return ResponseHelper.error('Không tìm thấy thông tin nhân viên', HTTP_STATUS_CODE.NOT_FOUND);
+      return ResponseHelper.error(
+        'Không tìm thấy thông tin nhân viên',
+        HTTP_STATUS_CODE.NOT_FOUND
+      );
     }
 
     const result = await this.misaDataSourceService.completeAssignment(
@@ -1023,7 +1110,8 @@ export class MisaDataSourceController {
   async markAssignmentIncomplete(
     @Param('id', ParseIntPipe) assignmentId: number,
     @Request() request: any,
-    @Body() body: {
+    @Body()
+    body: {
       incompleteReason: string;
       attachments?: string[];
     }
@@ -1032,7 +1120,10 @@ export class MisaDataSourceController {
 
     const employee = await this.employeeService.getEmployeeByUserId(userId);
     if (!employee) {
-      return ResponseHelper.error('Không tìm thấy thông tin nhân viên', HTTP_STATUS_CODE.NOT_FOUND);
+      return ResponseHelper.error(
+        'Không tìm thấy thông tin nhân viên',
+        HTTP_STATUS_CODE.NOT_FOUND
+      );
     }
 
     const result = await this.misaDataSourceService.markAssignmentIncomplete(
@@ -1054,7 +1145,8 @@ export class MisaDataSourceController {
   async reassignTask(
     @Param('id', ParseIntPipe) assignmentId: number,
     @Request() request: any,
-    @Body() body: {
+    @Body()
+    body: {
       newAssignedToId: number;
       reassignReason: string;
       scheduledAt?: string;
@@ -1065,7 +1157,10 @@ export class MisaDataSourceController {
 
     const employee = await this.employeeService.getEmployeeByUserId(userId);
     if (!employee) {
-      return ResponseHelper.error('Không tìm thấy thông tin nhân viên', HTTP_STATUS_CODE.NOT_FOUND);
+      return ResponseHelper.error(
+        'Không tìm thấy thông tin nhân viên',
+        HTTP_STATUS_CODE.NOT_FOUND
+      );
     }
 
     const result = await this.misaDataSourceService.reassignTask(
@@ -1090,7 +1185,8 @@ export class MisaDataSourceController {
   async retryAssignment(
     @Param('id', ParseIntPipe) assignmentId: number,
     @Request() request: any,
-    @Body() body: {
+    @Body()
+    body: {
       notes?: string;
       scheduledAt?: string;
     }
@@ -1099,7 +1195,10 @@ export class MisaDataSourceController {
 
     const employee = await this.employeeService.getEmployeeByUserId(userId);
     if (!employee) {
-      return ResponseHelper.error('Không tìm thấy thông tin nhân viên', HTTP_STATUS_CODE.NOT_FOUND);
+      return ResponseHelper.error(
+        'Không tìm thấy thông tin nhân viên',
+        HTTP_STATUS_CODE.NOT_FOUND
+      );
     }
 
     const result = await this.misaDataSourceService.retryAssignment(
@@ -1124,7 +1223,8 @@ export class MisaDataSourceController {
   async markAssignmentBlocked(
     @Param('id', ParseIntPipe) assignmentId: number,
     @Request() request: any,
-    @Body() body: {
+    @Body()
+    body: {
       blockedReason: string;
       attachments?: string[];
     }
@@ -1133,7 +1233,10 @@ export class MisaDataSourceController {
 
     const employee = await this.employeeService.getEmployeeByUserId(userId);
     if (!employee) {
-      return ResponseHelper.error('Không tìm thấy thông tin nhân viên', HTTP_STATUS_CODE.NOT_FOUND);
+      return ResponseHelper.error(
+        'Không tìm thấy thông tin nhân viên',
+        HTTP_STATUS_CODE.NOT_FOUND
+      );
     }
 
     const result = await this.misaDataSourceService.markAssignmentBlocked(
@@ -1155,7 +1258,8 @@ export class MisaDataSourceController {
   async resumeAssignment(
     @Param('id', ParseIntPipe) assignmentId: number,
     @Request() request: any,
-    @Body() body: {
+    @Body()
+    body: {
       notes?: string;
     }
   ): Promise<BaseResponse<any>> {
@@ -1163,7 +1267,10 @@ export class MisaDataSourceController {
 
     const employee = await this.employeeService.getEmployeeByUserId(userId);
     if (!employee) {
-      return ResponseHelper.error('Không tìm thấy thông tin nhân viên', HTTP_STATUS_CODE.NOT_FOUND);
+      return ResponseHelper.error(
+        'Không tìm thấy thông tin nhân viên',
+        HTTP_STATUS_CODE.NOT_FOUND
+      );
     }
 
     const result = await this.misaDataSourceService.resumeAssignment(
@@ -1185,7 +1292,8 @@ export class MisaDataSourceController {
   async retryTaskGroup(
     @Param('orderId', ParseIntPipe) orderId: number,
     @Request() request: any,
-    @Body() body: {
+    @Body()
+    body: {
       taskType: string;
       retryEmployeeIds: number[];
       newEmployeeIds: number[];
@@ -1196,7 +1304,10 @@ export class MisaDataSourceController {
 
     const employee = await this.employeeService.getEmployeeByUserId(userId);
     if (!employee) {
-      return ResponseHelper.error('Không tìm thấy thông tin nhân viên', HTTP_STATUS_CODE.NOT_FOUND);
+      return ResponseHelper.error(
+        'Không tìm thấy thông tin nhân viên',
+        HTTP_STATUS_CODE.NOT_FOUND
+      );
     }
 
     const result = await this.misaDataSourceService.retryTaskGroup(
@@ -1228,10 +1339,16 @@ export class MisaDataSourceController {
 
     const employee = await this.employeeService.getEmployeeByUserId(userId);
     if (!employee) {
-      return ResponseHelper.error('Không tìm thấy thông tin nhân viên', HTTP_STATUS_CODE.NOT_FOUND);
+      return ResponseHelper.error(
+        'Không tìm thấy thông tin nhân viên',
+        HTTP_STATUS_CODE.NOT_FOUND
+      );
     }
 
-    const result = await this.misaDataSourceService.deleteAssignment(assignmentId, employee.id);
+    const result = await this.misaDataSourceService.deleteAssignment(
+      assignmentId,
+      employee.id
+    );
 
     if (!result.success) {
       return ResponseHelper.error(result.message, HTTP_STATUS_CODE.BAD_REQUEST);
@@ -1248,7 +1365,8 @@ export class MisaDataSourceController {
   async createDailyReport(
     @Param('id', ParseIntPipe) assignmentId: number,
     @Request() request: any,
-    @Body() body: {
+    @Body()
+    body: {
       status: string;
       progressPercent?: number;
       description: string;
@@ -1260,7 +1378,10 @@ export class MisaDataSourceController {
 
     const employee = await this.employeeService.getEmployeeByUserId(userId);
     if (!employee) {
-      return ResponseHelper.error('Không tìm thấy thông tin nhân viên', HTTP_STATUS_CODE.NOT_FOUND);
+      return ResponseHelper.error(
+        'Không tìm thấy thông tin nhân viên',
+        HTTP_STATUS_CODE.NOT_FOUND
+      );
     }
 
     const result = await this.misaDataSourceService.createDailyReport(
@@ -1282,7 +1403,9 @@ export class MisaDataSourceController {
   async getReportsByAssignmentId(
     @Param('id', ParseIntPipe) assignmentId: number
   ): Promise<BaseResponse<any>> {
-    const reports = await this.misaDataSourceService.getReportsByAssignmentId(assignmentId);
+    const reports = await this.misaDataSourceService.getReportsByAssignmentId(
+      assignmentId
+    );
     return ResponseHelper.success(
       reports,
       'Lấy danh sách báo cáo thành công',
@@ -1296,7 +1419,9 @@ export class MisaDataSourceController {
   async getReportsByOrderId(
     @Param('id', ParseIntPipe) orderId: number
   ): Promise<BaseResponse<any>> {
-    const reports = await this.misaDataSourceService.getReportsByOrderId(orderId);
+    const reports = await this.misaDataSourceService.getReportsByOrderId(
+      orderId
+    );
     return ResponseHelper.success(
       reports,
       'Lấy danh sách báo cáo thành công',
