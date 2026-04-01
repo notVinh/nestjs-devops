@@ -600,7 +600,11 @@ export class MisaDataSourceController {
     @Query('priority') priority?: string,
     @Query('region') region?: string,
     @Query('localStatus') localStatus?: string,
-    @Query('province') province?: string
+    @Query('province') province?: string,
+    @Query('reqDeliveryStartDate') reqDeliveryStartDate?: string,
+    @Query('reqDeliveryEndDate') reqDeliveryEndDate?: string,
+    @Query('actualExportStartDate') actualExportStartDate?: string,
+    @Query('actualExportEndDate') actualExportEndDate?: string
   ): Promise<BaseResponse<{ data: MisaSaOrder[]; meta: any }>> {
     const result = await this.misaDataSourceService.getSaOrders(
       +page,
@@ -613,7 +617,11 @@ export class MisaDataSourceController {
       priority,
       region,
       localStatus,
-      province
+      province,
+      reqDeliveryStartDate,
+      reqDeliveryEndDate,
+      actualExportStartDate,
+      actualExportEndDate
     );
     return ResponseHelper.success(
       result,

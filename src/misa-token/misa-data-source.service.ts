@@ -908,7 +908,11 @@ export class MisaDataSourceService {
     priority?: string,
     region?: string,
     localStatus?: string,
-    province?: string
+    province?: string,
+    reqDeliveryStartDate?: string,
+    reqDeliveryEndDate?: string,
+    actualExportStartDate?: string,
+    actualExportEndDate?: string
   ): Promise<{ data: MisaSaOrder[]; meta: any }> {
     const qb = this.saOrderRepository.createQueryBuilder('order').where('order.deletedAt IS NULL');
 
@@ -953,6 +957,22 @@ export class MisaDataSourceService {
     // Province filter
     if (province) {
       qb.andWhere('order.province ILIKE :province', { province: `%${province}%` });
+    }
+
+    // Requested delivery date filter
+    if (reqDeliveryStartDate) {
+      qb.andWhere('order.requestedDeliveryDate >= :reqDeliveryStartDate', { reqDeliveryStartDate });
+    }
+    if (reqDeliveryEndDate) {
+      qb.andWhere('order.requestedDeliveryDate <= :reqDeliveryEndDate', { reqDeliveryEndDate });
+    }
+
+    // Actual export date filter
+    if (actualExportStartDate) {
+      qb.andWhere('order.actualExportDate >= :actualExportStartDate', { actualExportStartDate });
+    }
+    if (actualExportEndDate) {
+      qb.andWhere('order.actualExportDate <= :actualExportEndDate', { actualExportEndDate });
     }
 
     qb.orderBy('order.refDate', 'DESC').addOrderBy('order.refNo', 'DESC').skip((page - 1) * limit).take(limit);
