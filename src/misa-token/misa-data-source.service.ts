@@ -120,6 +120,8 @@ export class MisaDataSourceService {
     this.dataProcessors.set('customer', () => this.getCustomerProcessor());
     this.dataProcessors.set('product', () => this.getProductProcessor());
     this.dataProcessors.set('stock', () => this.getStockProcessor());
+    this.dataProcessors.set('kho', () => this.getStockProcessor());      // code trong DB = 'kho'
+    this.dataProcessors.set('di_stock', () => this.getStockProcessor()); // dataType từ MISA API
     this.dataProcessors.set('sa_order', () => this.getSaOrderProcessor());
     this.dataProcessors.set('sales_order', () => this.getSaOrderProcessor());
     this.dataProcessors.set('pu_order', () => this.getPuOrderProcessor());
