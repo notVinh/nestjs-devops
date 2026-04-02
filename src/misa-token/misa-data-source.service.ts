@@ -18,6 +18,7 @@ import { MisaSaOrderAssignment } from './entities/misa-sa-order-assignment.entit
 import { MisaSaOrderTaskReport } from './entities/misa-sa-order-task-report.entity';
 import { MisaPuOrder } from './entities/misa-pu-order.entity';
 import { MisaPuOrderDetail } from './entities/misa-pu-order-detail.entity';
+import { MisaInventoryBalance } from './entities/misa-inventory-balance.entity';
 import { MisaApiService } from './services/misa-api.service';
 import { MisaNotificationHelper } from './services/misa-notification.helper';
 import { MisaWorkflowService } from './services/misa-workflow.service';
@@ -104,6 +105,8 @@ export class MisaDataSourceService {
     private readonly puOrderRepository: Repository<MisaPuOrder>,
     @InjectRepository(MisaPuOrderDetail)
     private readonly puOrderDetailRepository: Repository<MisaPuOrderDetail>,
+    @InjectRepository(MisaInventoryBalance)
+    private readonly inventoryBalanceRepository: Repository<MisaInventoryBalance>,
     private readonly misaApiService: MisaApiService,
     private readonly notificationHelper: MisaNotificationHelper,
     private readonly workflowService: MisaWorkflowService,
@@ -121,6 +124,7 @@ export class MisaDataSourceService {
     this.dataProcessors.set('sales_order', () => this.getSaOrderProcessor());
     this.dataProcessors.set('pu_order', () => this.getPuOrderProcessor());
     this.dataProcessors.set('purchase_order', () => this.getPuOrderProcessor());
+    this.dataProcessors.set('inventory_balance', () => this.getInventoryBalanceProcessor());
   }
 
   // ==================== DATA PROCESSOR CONFIGS ====================
@@ -182,6 +186,18 @@ export class MisaDataSourceService {
       fromMisaResponse: MisaPuOrder.fromMisaResponse,
       entityName: 'đơn mua hàng',
       entityClass: MisaPuOrder,
+    };
+  }
+
+  private async getInventoryBalanceProcessor(): Promise<EntityProcessorConfig<MisaInventoryBalance>> {
+    return {
+      repository: this.inventoryBalanceRepository,
+      uniqueIdField: 'recordId',
+      codeField: 'stockCode',
+      nameField: 'inventoryItemName',
+      fromMisaResponse: MisaInventoryBalance.fromMisaResponse,
+      entityName: 'tồn kho',
+      entityClass: MisaInventoryBalance,
     };
   }
 
@@ -249,6 +265,16 @@ export class MisaDataSourceService {
     await this.syncHistoryRepository.save(syncHistory);
   }
 
+  async getInventoryBalanceByStockId(stockId: string): Promise<MisaInventoryBalance[]> {
+    return this.inventoryBalanceRepository.find({
+      where: { stockId },
+      order: {
+        closingQuantity: 'DESC',
+        inventoryItemName: 'ASC',
+      },
+    });
+  }
+
   // ==================== MAIN SYNC METHOD ====================
 
   async startSync(dataSourceId: number): Promise<{
@@ -303,19 +329,85 @@ export class MisaDataSourceService {
 
     await addLog('info', `Bắt đầu kéo dữ liệu ${dataSource.name}...`);
 
-    let apiResult = await this.misaApiService.callMisaApi(url, requestBody, token, apiConfig);
+    let records: any[] = [];
+    let total = 0;
+    let apiResult: any;
 
-    // Retry với token mới nếu lỗi
-    if (!apiResult.success && !syncHistory.lastResponseSample?.retried) {
-      await addLog('warning', 'Đang thử làm mới token và gọi lại...');
+    if (dataSource.code === 'inventory_balance') {
+      const activeStocks = await this.stockRepository.find({ where: { inactive: false } });
+      if (activeStocks.length === 0) {
+        await addLog('warning', 'Không tìm thấy kho nào để lấy tồn kho.');
+        return { success: false, message: 'Không tìm thấy kho nào để lấy tồn kho.' };
+      }
+
+      await addLog('info', `Bắt đầu lấy tồn kho tổng hợp cho tất cả các kho (Sử dụng mã hệ thống All-Stocks)...`);
+
+      const clonedBody = JSON.parse(JSON.stringify(requestBody));
+      clonedBody.requestFrom = 1;
+      clonedBody.pageSize = 100000;
+      clonedBody.pageIndex = 1;
+
+      if (clonedBody.parameters) {
+        let paramObj: any = {};
+        if (typeof clonedBody.parameters === 'string') {
+          try {
+            paramObj = JSON.parse(Buffer.from(clonedBody.parameters, 'base64').toString('utf8'));
+          } catch (e: any) {
+            await addLog('warning', `Không thể parse parameters base64: ${e.message}`);
+          }
+        } else if (typeof clonedBody.parameters === 'object') {
+          paramObj = { ...clonedBody.parameters };
+        }
+        
+        paramObj.p_list_stock_id = '99999999-9999-9999-9999-999999999999,';
+        const branchIds = [...new Set(activeStocks.map(s => s.branchId).filter(id => !!id))];
+        if (branchIds.length > 0) {
+          paramObj.p_branch_id = branchIds.join(',') + ',';
+          await addLog('info', `Gộp ${branchIds.length} chi nhánh vào yêu cầu tổng hợp.`);
+        }
+        delete paramObj.p_session_key;
+        clonedBody.parameters = Buffer.from(JSON.stringify(paramObj)).toString('base64');
+      }
+
       try {
-        const newToken = await this.misaApiService.refreshToken();
-        await addLog('success', 'Làm mới token thành công, đang thử lại...');
-        syncHistory.lastResponseSample = { retried: true };
-        await this.syncHistoryRepository.save(syncHistory);
-        apiResult = await this.misaApiService.callMisaApi(url, requestBody, newToken, apiConfig);
-      } catch (error: any) {
-        await addLog('error', `Không thể làm mới token: ${error.message}`);
+        let stockApiResult = await this.misaApiService.callMisaApi(url, clonedBody, token, apiConfig);
+        if (!stockApiResult.success && !syncHistory.lastResponseSample?.retried) {
+          try {
+            const newToken = await this.misaApiService.refreshToken();
+            token = newToken;
+            syncHistory.lastResponseSample = { retried: true };
+            stockApiResult = await this.misaApiService.callMisaApi(url, clonedBody, token, apiConfig);
+          } catch (e: any) {}
+        }
+
+        if (stockApiResult.success && stockApiResult.data) {
+          records = stockApiResult.data;
+          total = records.length;
+          apiResult = { success: true, data: records, total };
+          await addLog('success', `Đã lấy thành công ${records.length} bản ghi tồn kho tổng hợp.`);
+        } else {
+          apiResult = stockApiResult;
+        }
+      } catch (e: any) {
+        await addLog('error', `Lỗi xử lý API tổng hợp: ${e.message}`);
+        apiResult = { success: false, message: e.message };
+      }
+    } else {
+      // Logic bình thường
+      apiResult = await this.misaApiService.callMisaApi(url, requestBody, token, apiConfig);
+
+      // Retry với token mới nếu lỗi
+      if (!apiResult.success && !syncHistory.lastResponseSample?.retried) {
+        await addLog('warning', 'Đang thử làm mới token và gọi lại...');
+        try {
+          const newToken = await this.misaApiService.refreshToken();
+          await addLog('success', 'Làm mới token thành công, đang thử lại...');
+          syncHistory.lastResponseSample = { retried: true };
+          await this.syncHistoryRepository.save(syncHistory);
+          apiResult = await this.misaApiService.callMisaApi(url, requestBody, newToken, apiConfig);
+        } catch (error: any) {
+          await addLog('error', `Không thể làm mới token: ${error.message}`);
+        }
       }
     }
 
@@ -326,10 +418,12 @@ export class MisaDataSourceService {
       return { success: false, message: errorMsg, syncId: syncHistory.id, data: apiResult.error };
     }
 
-    const records = apiResult.data || [];
-    const total = apiResult.total || 0;
+    if (dataSource.code !== 'inventory_balance') {
+      records = apiResult.data || [];
+      total = apiResult.total || 0;
+    }
 
-    await addLog('success', `Nhận được ${records.length} bản ghi (tổng: ${total})`);
+    await addLog('success', `Nhận được tổng cộng ${records.length} bản ghi`);
 
     let syncStats: SyncResult | undefined;
     if (records.length > 0) {
@@ -482,7 +576,7 @@ export class MisaDataSourceService {
     for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
       const batch = toInsert.slice(i, i + BATCH_SIZE);
       try {
-        await config.repository.createQueryBuilder().insert().into(config.entityClass).values(batch as any).execute();
+        await config.repository.createQueryBuilder().insert().into(config.entityClass).values(batch as any).orIgnore().execute();
         result.created += batch.length;
       } catch (error: any) {
         this.logger.error(`Lỗi bulk insert batch ${i}-${i + batch.length}:`, error.message);

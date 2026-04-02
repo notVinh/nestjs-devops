@@ -16,6 +16,7 @@ export interface MisaApiResult {
     exceptionId?: string;
     rawResponse?: any;
   };
+  rawResponse?: any;
 }
 
 /**
@@ -80,9 +81,19 @@ export class MisaApiService {
    * Parse MISA API success response để lấy records
    */
   parseMisaSuccessResponse(responseData: any): { records: any[]; total: number } {
-    const dataContainer = responseData?.Data || responseData?.data || {};
-    const records = dataContainer?.PageData || dataContainer?.Data || dataContainer || [];
-    const total = dataContainer?.Total || dataContainer?.total || (Array.isArray(records) ? records.length : 0);
+    let records: any[] = [];
+    let total = 0;
+
+    // Report endpoints might return PageData at root
+    if (responseData?.PageData && Array.isArray(responseData.PageData)) {
+      records = responseData.PageData;
+      total = responseData.Total || records.length;
+    } else {
+      // Standard entities endpoints
+      const dataContainer = responseData?.Data || responseData?.data || {};
+      records = dataContainer?.PageData || dataContainer?.Data || dataContainer || [];
+      total = dataContainer?.Total || dataContainer?.total || (Array.isArray(records) ? records.length : 0);
+    }
 
     return {
       records: Array.isArray(records) ? records : [],
@@ -124,7 +135,7 @@ export class MisaApiService {
       }
 
       const { records, total } = this.parseMisaSuccessResponse(responseData);
-      return { success: true, data: records, total };
+      return { success: true, data: records, total, rawResponse: responseData };
     } catch (error: any) {
       const errorData = error.response?.data;
 

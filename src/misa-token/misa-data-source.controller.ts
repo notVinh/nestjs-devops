@@ -28,6 +28,7 @@ import { MisaSaOrder } from './entities/misa-sa-order.entity';
 import { MisaSaOrderDetail } from './entities/misa-sa-order-detail.entity';
 import { MisaPuOrder } from './entities/misa-pu-order.entity';
 import { MisaPuOrderDetail } from './entities/misa-pu-order-detail.entity';
+import { MisaInventoryBalance } from './entities/misa-inventory-balance.entity';
 import { BaseResponse, ResponseHelper } from 'src/utils/base-response';
 import { HTTP_STATUS_CODE } from 'src/utils/constant';
 import { UsersService } from 'src/users/users.service';
@@ -345,6 +346,20 @@ export class MisaDataSourceController {
     return ResponseHelper.success(
       result,
       'Lấy danh sách kho thành công',
+      HTTP_STATUS_CODE.OK
+    );
+  }
+
+  @Get('inventory-balance/:stockId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get inventory balance by stock ID' })
+  async getInventoryByStock(
+    @Param('stockId') stockId: string
+  ): Promise<BaseResponse<MisaInventoryBalance[]>> {
+    const data = await this.misaDataSourceService.getInventoryBalanceByStockId(stockId);
+    return ResponseHelper.success(
+      data,
+      'Lấy danh sách tồn kho thành công',
       HTTP_STATUS_CODE.OK
     );
   }

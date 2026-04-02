@@ -16,6 +16,7 @@ import { MisaSaOrderAssignment } from './entities/misa-sa-order-assignment.entit
 import { MisaSaOrderTaskReport } from './entities/misa-sa-order-task-report.entity';
 import { MisaPuOrder } from './entities/misa-pu-order.entity';
 import { MisaPuOrderDetail } from './entities/misa-pu-order-detail.entity';
+import { MisaInventoryBalance } from './entities/misa-inventory-balance.entity';
 import { MisaDataSourceController } from './misa-data-source.controller';
 import { MisaDataSourceService } from './misa-data-source.service';
 // Services mới được tách ra
@@ -46,6 +47,7 @@ import { PurchaseRequisition } from 'src/purchase-requisition/entities/purchase-
       MisaSaOrderTaskReport,
       MisaPuOrder,
       MisaPuOrderDetail,
+      MisaInventoryBalance,
       Employee,
       PurchaseRequisition,
     ]),
