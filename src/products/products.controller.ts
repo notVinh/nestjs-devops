@@ -49,6 +49,29 @@ export class ProductsController {
     return this.productsService.findAllWithSearch(search, lang);
   }
 
+  /**
+   * 3b. Đối chiếu tồn kho MISA
+   * GET /products/inventory-balance?stockId=UUID&page=1&limit=50
+   *
+   * - Trả về toàn bộ sản phẩm (có misaModel) kèm thông tin tồn kho tương ứng
+   * - Nếu không truyền stockId → lấy dữ liệu tất cả kho
+   * - hasInventory = false → sản phẩm chưa có dữ liệu tồn trong MISA
+   */
+  @Get('inventory-balance')
+  getInventoryBalance(
+    @Query('stockId') stockId?: string,
+    @Query('misaModel') misaModel?: string,
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '50',
+  ) {
+    return this.productsService.getInventoryBalance(
+      stockId,
+      misaModel,
+      parseInt(page, 10) || 1,
+      parseInt(limit, 10) || 50,
+    );
+  }
+
   // 4. Gán danh mục hàng loạt cho sản phẩm
   @Patch('assign-category')
   async assignToCategory(

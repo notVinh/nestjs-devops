@@ -5,6 +5,8 @@ import { Category } from './entities/category.entity';
 import { CategoryTranslation } from './entities/category-translation.entity';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { MisaInventoryBalance } from 'src/misa-token/entities/misa-inventory-balance.entity';
+
 
 @Injectable()
 export class CategoriesService {
@@ -14,6 +16,9 @@ export class CategoriesService {
 
     @InjectRepository(CategoryTranslation)
     private translationRepository: Repository<CategoryTranslation>,
+
+    @InjectRepository(MisaInventoryBalance)
+    private inventoryBalanceRepository: Repository<MisaInventoryBalance>,
 
     private dataSource: DataSource
   ) {}
@@ -485,6 +490,45 @@ export class CategoriesService {
 
     // 2. Biến đổi dữ liệu sản phẩm bên trong Category
     if (category.products && category.products.length > 0) {
+      // Thu thập tất cả các misaModel không rỗng từ danh sách sản phẩm
+      const misaModels = category.products
+        .map(p => p.misaModel)
+        .filter(m => !!m);
+
+      let allBalances: any[] = [];
+      if (misaModels.length > 0) {
+        // Query toàn bộ tồn kho có thể liên quan:
+        // Khớp chính xác hoặc khớp prefix (MF -> MF-...)
+        const queryBuilder = this.inventoryBalanceRepository
+          .createQueryBuilder('inv')
+          .select([
+            'inv.stockId        AS "stockId"',
+            'inv.stockCode      AS "stockCode"',
+            'inv.stockName      AS "stockName"',
+            'inv.inventoryItemCode AS "inventoryItemCode"',
+            'inv.inventoryItemName AS "inventoryItemName"',
+            'inv.unitName       AS "unitName"',
+            'inv.closingQuantity  AS "closingQuantity"',
+            'inv.syncedAt        AS "syncedAt"',
+          ]);
+
+        // Tạo điều kiện lọc cho mảng các misaModel
+        const conditions = misaModels.map((m, index) => {
+          return `(inv.inventoryItemCode = :m${index} OR inv.inventoryItemCode LIKE :p${index})`;
+        });
+
+        const parameters = misaModels.reduce((acc, m, index) => {
+          acc[`m${index}`] = m;
+          acc[`p${index}`] = `${m}-%`;
+          return acc;
+        }, {});
+
+        allBalances = await queryBuilder
+          .where(`(${conditions.join(' OR ')})`)
+          .setParameters(parameters)
+          .getRawMany();
+      }
+
       category.products = category.products.map(prod => {
         // Xử lý mảng ảnh chi tiết (images)
         const mappedImages = (prod.images || []).map((imgUrl: string) => {
@@ -494,23 +538,30 @@ export class CategoriesService {
           return imgUrl;
         });
 
-        // Xử lý ảnh đại diện (image)
-        // let finalImage = prod.image;
-        // if (prod.image && prod.image.includes('viettelidc.com.vn')) {
-        //   finalImage = `${proxyBaseUrl}?url=${encodeURIComponent(prod.image)}`;
-        // }
+        // Lọc ra các bản ghi tồn kho thuộc về sản phẩm này
+        const prodBalances = allBalances
+          .filter(b => {
+            if (!prod.misaModel) return false;
+            return (
+              b.inventoryItemCode === prod.misaModel ||
+              b.inventoryItemCode.startsWith(`${prod.misaModel}-`)
+            );
+          })
+          .map(b => ({
+            ...b,
+            closingQuantity: b.closingQuantity ? parseFloat(b.closingQuantity) : 0,
+          }));
 
-        // Trả về sản phẩm đã được format
+        // Trả về sản phẩm đã được format kèm tồn kho
         return {
           ...prod,
-          // image: finalImage,
           images: mappedImages,
-          // Tiện tay format luôn cái tên hiển thị theo ngôn ngữ nếu bạn muốn
           displayName:
             prod.translations?.find(t => t.languageCode === lang)?.name ||
             prod.id,
+          inventoryBalance: prodBalances,
         };
-      }) as any; // Cast 'any' nếu Entity khắt khe về kiểu dữ liệu trả về
+      }) as any;
     }
 
     return category;

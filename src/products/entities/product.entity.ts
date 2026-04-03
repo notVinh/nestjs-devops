@@ -32,6 +32,9 @@ export class Product {
   @Column({ nullable: true })
   model: string;
 
+  @Column({ nullable: true })
+  misaModel: string; // Mã sản phẩm MISA để đối chiếu tồn kho (khớp với inventoryItemCode trong misaInventoryBalance)
+
   @Column({ type: 'jsonb', nullable: true })
   specs: any;
 

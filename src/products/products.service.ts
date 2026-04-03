@@ -6,12 +6,15 @@ import { Product } from './entities/product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { Category } from 'src/categories/entities/category.entity';
+import { MisaInventoryBalance } from 'src/misa-token/entities/misa-inventory-balance.entity';
 
 @Injectable()
 export class ProductsService {
   constructor(
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
+    @InjectRepository(MisaInventoryBalance)
+    private readonly inventoryBalanceRepository: Repository<MisaInventoryBalance>,
     private dataSource: DataSource
   ) {}
 
@@ -133,13 +136,65 @@ export class ProductsService {
       description: proxyifyHtml(trans.description),
     }));
 
-    // 4. Trả về object product đã được "Proxy hóa" toàn bộ
+    // 4. Lấy tồn kho từ misaInventoryBalance (nếu sản phẩm có misaModel)
+    let inventoryBalance: any[] = [];
+    if (product.misaModel) {
+      const invRows = await this.inventoryBalanceRepository
+        .createQueryBuilder('inv')
+        .select([
+          'inv.stockId        AS "stockId"',
+          'inv.stockCode      AS "stockCode"',
+          'inv.stockName      AS "stockName"',
+          'inv.inventoryItemCode AS "inventoryItemCode"',
+          'inv.inventoryItemName AS "inventoryItemName"',
+          'inv.unitName       AS "unitName"',
+          'inv.closingQuantity  AS "closingQuantity"',
+          'inv.openingQuantity  AS "openingQuantity"',
+          'inv.totalInQuantity  AS "totalInQuantity"',
+          'inv.totalOutQuantity AS "totalOutQuantity"',
+          'inv.closingAmount    AS "closingAmount"',
+          'inv.fromDate        AS "fromDate"',
+          'inv.toDate          AS "toDate"',
+          'inv.syncedAt        AS "syncedAt"',
+        ])
+        .where(
+          // Exact match HOẶC prefix match (misaModel = "MF" → lấy MF-370, MF-350...)
+          `inv.inventoryItemCode = :exact OR inv.inventoryItemCode LIKE :prefix`,
+          {
+            exact: product.misaModel,
+            prefix: `${product.misaModel}-%`,
+          },
+        )
+        .orderBy('inv.stockCode', 'ASC')
+        .getRawMany();
+
+      inventoryBalance = invRows.map(r => ({
+        stockId: r.stockId,
+        stockCode: r.stockCode,
+        stockName: r.stockName,
+        inventoryItemCode: r.inventoryItemCode,
+        inventoryItemName: r.inventoryItemName,
+        unitName: r.unitName,
+        closingQuantity: r.closingQuantity != null ? parseFloat(r.closingQuantity) : null,
+        openingQuantity: r.openingQuantity != null ? parseFloat(r.openingQuantity) : null,
+        totalInQuantity: r.totalInQuantity != null ? parseFloat(r.totalInQuantity) : null,
+        totalOutQuantity: r.totalOutQuantity != null ? parseFloat(r.totalOutQuantity) : null,
+        closingAmount: r.closingAmount != null ? parseFloat(r.closingAmount) : null,
+        fromDate: r.fromDate,
+        toDate: r.toDate,
+        syncedAt: r.syncedAt,
+      }));
+    }
+
+    // 5. Trả về object product đã được "Proxy hóa" + kèm tồn kho
     return {
       ...product,
       images: mappedImages,
       translations: mappedTranslations,
+      inventoryBalance, // [] nếu chưa set misaModel hoặc không tìm thấy trong MISA
     };
   }
+
 
   // async findByCategory(categorySlug: string) {
   //   return await this.productRepository.find({
@@ -645,5 +700,161 @@ export class ProductsService {
       });
 
     return formattedProducts;
+  }
+
+  /**
+   * Đối chiếu tồn kho: Lấy danh sách sản phẩm kèm số lượng tồn từ misaInventoryBalance.
+   *
+   * Logic matching:
+   * - products.misaModel = "MF"    → khớp với tất cả inventoryItemCode bắt đầu bằng "MF-"
+   *   VD: "MF-370", "MF-350", "MF-400", ...
+   * - products.misaModel = "MF-370" → chỉ khớp chính xác với inventoryItemCode = "MF-370"
+   *
+   * @param stockId  UUID của kho cụ thể (nếu undefined → lấy tất cả kho)
+   * @param page     Trang hiện tại
+   * @param limit    Số bản ghi mỗi trang
+   */
+  async getInventoryBalance(
+    stockId?: string,
+    misaModelFilter?: string,  // VD: "MF", "GT" → lọc sản phẩm có misaModel khớp prefix đó
+    page: number = 1,
+    limit: number = 50,
+  ) {
+    const skip = (page - 1) * limit;
+
+    // ----------------------------------------------------------------
+    // JOIN condition:
+    //   1. Exact:  inventoryItemCode = misaModel
+    //   2. Prefix: inventoryItemCode LIKE misaModel || '-%'
+    //      → misaModel = "MF" sẽ match "MF-370", "MF-350", v.v.
+    // ----------------------------------------------------------------
+    const qb = this.productRepository
+      .createQueryBuilder('p')
+      .select([
+        'p.id               AS "productId"',
+        'p.misaModel        AS "misaModel"',
+        'p.brand            AS "brand"',
+        'p.model            AS "model"',
+        // Tồn kho: SUM theo từng kho nếu không lọc stockId
+        'inv."stockId"      AS "stockId"',
+        'inv."stockCode"    AS "stockCode"',
+        'inv."stockName"    AS "stockName"',
+        'inv."inventoryItemCode" AS "inventoryItemCode"',
+        'inv."inventoryItemName" AS "inventoryItemName"',
+        'inv."unitName"    AS "unitName"',
+        'inv."closingQuantity"  AS "closingQuantity"',
+        'inv."openingQuantity" AS "openingQuantity"',
+        'inv."totalInQuantity" AS "totalInQuantity"',
+        'inv."totalOutQuantity" AS "totalOutQuantity"',
+        'inv."closingAmount"   AS "closingAmount"',
+        'inv."fromDate"    AS "fromDate"',
+        'inv."toDate"      AS "toDate"',
+        'inv."syncedAt"    AS "syncedAt"',
+      ])
+      // JOIN theo logic:
+      // 1. Exact match: inventoryItemCode = misaModel
+      //    VD: misaModel = "MF-370" khớp với inventoryItemCode = "MF-370"
+      // 2. Prefix match: inventoryItemCode LIKE misaModel || '-%'
+      //    VD: misaModel = "MF" khớp với inventoryItemCode = "MF-370", "MF-350", ...
+      .leftJoin(
+        MisaInventoryBalance,
+        'inv',
+        `p."misaModel" IS NOT NULL
+         AND (
+           inv."inventoryItemCode" = p."misaModel"
+           OR inv."inventoryItemCode" LIKE p."misaModel" || '-%'
+         )`,
+      )
+      .where('p."misaModel" IS NOT NULL')
+
+    // Lọc theo misaModel prefix (nếu có)
+    // VD: misaModelFilter = "MF" → chỉ lấy products có misaModel = "MF" hoặc bắt đầu bằng "MF-"
+    if (misaModelFilter) {
+      qb.andWhere(
+        `(p."misaModel" = :mf OR p."misaModel" LIKE :mfPrefix)`,
+        { mf: misaModelFilter, mfPrefix: `${misaModelFilter}-%` },
+      );
+    }
+
+    // Lọc theo kho cụ thể (nếu có)
+    if (stockId) {
+      qb.andWhere(
+        '(inv."stockId" = :stockId OR inv."stockId" IS NULL)',
+        { stockId },
+      );
+    }
+
+    // Query count (để phân trang)
+    const totalQb = this.productRepository
+      .createQueryBuilder('p')
+      .where('p."misaModel" IS NOT NULL');
+    if (misaModelFilter) {
+      totalQb.andWhere(
+        `(p."misaModel" = :mf OR p."misaModel" LIKE :mfPrefix)`,
+        { mf: misaModelFilter, mfPrefix: `${misaModelFilter}-%` },
+      );
+    }
+    const total = await totalQb.getCount();
+
+    // Query data
+    const rows = await qb
+      .orderBy('p.id', 'ASC')
+      .addOrderBy('inv."stockCode"', 'ASC', 'NULLS LAST')
+      .offset(skip)
+      .limit(limit)
+      .getRawMany();
+
+    // Gắn thông tin tên sản phẩm từ translations (vi)
+    const productIds = [...new Set(rows.map((r) => r.productId))];
+    const productsWithNames = await this.productRepository.find({
+      where: { id: In(productIds) },
+      relations: ['translations'],
+      select: ['id'],
+    });
+
+    const nameMap = new Map(
+      productsWithNames.map((p2) => [
+        p2.id,
+        p2.translations?.find((t) => t.languageCode === 'vi')?.name ||
+          p2.translations?.[0]?.name ||
+          p2.id,
+      ]),
+    );
+
+    const data = rows.map((r) => ({
+      productId: r.productId,
+      productName: nameMap.get(r.productId) ?? r.productId,
+      misaModel: r.misaModel,
+      brand: r.brand,
+      model: r.model,
+      // Tồn kho
+      hasInventory: r.inventoryItemCode != null,
+      stockId: r.stockId,
+      stockCode: r.stockCode,
+      stockName: r.stockName,
+      inventoryItemCode: r.inventoryItemCode,
+      inventoryItemName: r.inventoryItemName,
+      unitName: r.unitName,
+      closingQuantity: r.closingQuantity != null ? parseFloat(r.closingQuantity) : null,
+      openingQuantity: r.openingQuantity != null ? parseFloat(r.openingQuantity) : null,
+      totalInQuantity: r.totalInQuantity != null ? parseFloat(r.totalInQuantity) : null,
+      totalOutQuantity: r.totalOutQuantity != null ? parseFloat(r.totalOutQuantity) : null,
+      closingAmount: r.closingAmount != null ? parseFloat(r.closingAmount) : null,
+      fromDate: r.fromDate,
+      toDate: r.toDate,
+      syncedAt: r.syncedAt,
+    }));
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        lastPage: Math.ceil(total / limit),
+        stockId: stockId ?? null,
+        misaModel: misaModelFilter ?? null,
+      },
+    };
   }
 }

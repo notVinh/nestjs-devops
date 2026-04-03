@@ -50,6 +50,10 @@ export class CreateProductDto {
   @IsOptional()
   model?: string;
 
+  @IsOptional()
+  @IsString()
+  misaModel?: string; // Mã MISA để đối chiếu tồn kho
+
   @IsNumber()
   @IsOptional()
   order?: number;
