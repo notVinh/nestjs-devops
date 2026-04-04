@@ -53,15 +53,17 @@ export class FilesService {
       let s3Path = '';
       if (driver === 's3') {
         const s3File = file as Express.MulterS3.File;
-        // MulterS3 có thể set location (full URL) hoặc key
-        if (s3File.location) {
-          s3Path = s3File.location;
-        } else if (s3File.key) {
+        // Luôn build URL từ key vì location với multipart upload (file lớn)
+        // không trả về full URL đúng cách (thiếu viettelidc endpoint)
+        if (s3File.key) {
           s3Path = `${this.configService.get('file.awsDefaultS3Url', {
             infer: true,
           })}/${this.configService.get('file.awsDefaultS3Bucket', {
             infer: true,
           })}/${s3File.key}`;
+        } else if (s3File.location) {
+          // fallback nếu không có key
+          s3Path = s3File.location;
         } else {
           console.error('S3 file missing both location and key!');
           throw new Error('S3 upload failed: missing file location/key');
@@ -186,16 +188,17 @@ export class FilesService {
       let s3Path = '';
       if (driver === 's3') {
         const s3File = file as Express.MulterS3.File;
-        // Nếu có truyền folder, ta sẽ đảm bảo đường dẫn trên S3/Viettel IDC có prefix đó
-        if (s3File.location) {
-          s3Path = s3File.location;
-        } else if (s3File.key) {
-          const keyWithFolder = folder ? `${folder}/${s3File.key}` : s3File.key;
+        // Luôn build URL từ key - key đã bao gồm folder prefix từ multer config
+        // KHÔNG cộng thêm folder vào key vì sẽ bị lặp (vd: product/product/file.jpg)
+        if (s3File.key) {
           s3Path = `${this.configService.get('file.awsDefaultS3Url', {
             infer: true,
           })}/${this.configService.get('file.awsDefaultS3Bucket', {
             infer: true,
-          })}/${keyWithFolder}`;
+          })}/${s3File.key}`;
+        } else if (s3File.location) {
+          // fallback nếu không có key
+          s3Path = s3File.location;
         }
       }
 
