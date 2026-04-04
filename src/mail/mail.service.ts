@@ -165,7 +165,6 @@ export class MailService {
   }
 
   async sendQuotation(to: string, quotationData: any): Promise<void> {
-    console.log(quotationData);
     // 1. Compile Template thành HTML bằng MailerService (tái sử dụng logic của bạn)
     const templatePath = path.join(
       this.configService.getOrThrow('app.workingDirectory', { infer: true }),
@@ -184,7 +183,10 @@ export class MailService {
       day: new Date().getDate(),
       month: new Date().getMonth() + 1,
       year: new Date().getFullYear(),
-      items: items,
+      items: items.map((item: any) => ({
+        ...item,
+        image: item.product?.images?.[0] || '', // Lấy ảnh đầu tiên của sản phẩm nếu có
+      })),
     });
 
     // 2. Sử dụng Puppeteer để chuyển HTML thành PDF

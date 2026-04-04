@@ -103,9 +103,11 @@
             {{#each items}} <tr>
                 <td class="text-center">{{addOne @index}}</td>
                 <td class="font-bold">{{this.productId}}</td>
-                <td class="text-center italic" style="color:#9ca3af; font-size:8px;">Hình ảnh</td>
-                <td class="text-center font-bold">{{this.brand}}</td>
-                <td class="text-center italic">{{this.model}}</td>
+                <td class="text-center italic" style="color:#9ca3af; font-size:8px;">
+                    <img src="{{this.image}}" alt="Hình ảnh" style="width: 100%; height: auto;" />
+                </td>
+                <td class="text-center font-bold">{{this.product.brand}}</td>
+                <td class="text-center italic">{{this.product.model}}</td>
                 <td style="font-size: 9px;">
                     {{#if this.notes}}{{this.notes}}{{else}}Thông số kỹ thuật tiêu chuẩn{{/if}}
                 </td>

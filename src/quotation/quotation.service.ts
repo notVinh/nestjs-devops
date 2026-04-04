@@ -124,7 +124,7 @@ export class QuotationService {
   async handleSendQuotation(id: number) {
     const data = await this.quotationRepo.findOne({
       where: { id },
-      relations: ['items'],
+      relations: ['items', 'items.product', 'items.product.translations'],
     });
 
     // 1. Kiểm tra nếu không tìm thấy dữ liệu trong DB
