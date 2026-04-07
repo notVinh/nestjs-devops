@@ -201,6 +201,9 @@ export class MisaSaOrder extends EntityHelper {
   @Column({ type: 'varchar', length: 50, nullable: true })
   saleType: string | null; // Loại: Bán, Cho thuê, Cho mượn, Đổi - Sale Admin nhập
 
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  backDate: number | null; // Ngày trả hàng - Sale Admin nhập
+
   @Column({ type: 'varchar', length: 255, nullable: true })
   receiverName: string | null; // Tên người nhận - Sale Admin nhập
 
@@ -317,7 +320,9 @@ export class MisaSaOrder extends EntityHelper {
 
       // Timestamps
       misaCreatedDate: data.created_date ? new Date(data.created_date) : null,
-      misaModifiedDate: data.modified_date ? new Date(data.modified_date) : null,
+      misaModifiedDate: data.modified_date
+        ? new Date(data.modified_date)
+        : null,
       editVersion: data.edit_version || null,
     };
   }

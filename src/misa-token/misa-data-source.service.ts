@@ -1108,6 +1108,7 @@ export class MisaDataSourceService {
       priority?: string | null;
       localDeliveryStatus?: string | null;
       saleType?: string | null;
+      backDate?: number | null;
       receiverName?: string | null;
       receiverPhone?: string | null;
       specificAddress?: string | null;
@@ -1129,7 +1130,7 @@ export class MisaDataSourceService {
     const allowedFields = [
       'requestedDeliveryDate', 'actualExportDate', 'goodsStatus', 'machineType', 'region',
       'priority', 'localDeliveryStatus', 'saleType', 'receiverName', 'receiverPhone',
-      'specificAddress', 'province', 'needsAdditionalOrder', 'additionalOrderNote',
+      'specificAddress', 'province', 'needsAdditionalOrder', 'additionalOrderNote', 'backDate'
     ];
 
     const updateData: Partial<MisaSaOrder> = {};
