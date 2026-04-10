@@ -157,13 +157,20 @@ export class ProductsService {
           'inv.toDate          AS "toDate"',
           'inv.syncedAt        AS "syncedAt"',
         ])
+        // .where(
+        //   // Exact match HOẶC prefix match (misaModel = "MF" → lấy MF-370, MF-350...)
+        //   `inv.inventoryItemCode = :exact OR inv.inventoryItemCode LIKE :prefix`,
+        //   {
+        //     exact: product.misaModel,
+        //     prefix: `${product.misaModel}-%`,
+        //   }
+        // )
         .where(
-          // Exact match HOẶC prefix match (misaModel = "MF" → lấy MF-370, MF-350...)
-          `inv.inventoryItemCode = :exact OR inv.inventoryItemCode LIKE :prefix`,
+          // Sử dụng LIKE với % ở cuối để lấy tất cả hậu tố
+          `inv.inventoryItemCode LIKE :search`,
           {
-            exact: product.misaModel,
-            prefix: `${product.misaModel}-%`,
-          },
+            search: `${product.misaModel}%`, // Không thêm dấu "-" ở đây
+          }
         )
         .orderBy('inv.stockCode', 'ASC')
         .getRawMany();
@@ -175,11 +182,16 @@ export class ProductsService {
         inventoryItemCode: r.inventoryItemCode,
         inventoryItemName: r.inventoryItemName,
         unitName: r.unitName,
-        closingQuantity: r.closingQuantity != null ? parseFloat(r.closingQuantity) : null,
-        openingQuantity: r.openingQuantity != null ? parseFloat(r.openingQuantity) : null,
-        totalInQuantity: r.totalInQuantity != null ? parseFloat(r.totalInQuantity) : null,
-        totalOutQuantity: r.totalOutQuantity != null ? parseFloat(r.totalOutQuantity) : null,
-        closingAmount: r.closingAmount != null ? parseFloat(r.closingAmount) : null,
+        closingQuantity:
+          r.closingQuantity != null ? parseFloat(r.closingQuantity) : null,
+        openingQuantity:
+          r.openingQuantity != null ? parseFloat(r.openingQuantity) : null,
+        totalInQuantity:
+          r.totalInQuantity != null ? parseFloat(r.totalInQuantity) : null,
+        totalOutQuantity:
+          r.totalOutQuantity != null ? parseFloat(r.totalOutQuantity) : null,
+        closingAmount:
+          r.closingAmount != null ? parseFloat(r.closingAmount) : null,
         fromDate: r.fromDate,
         toDate: r.toDate,
         syncedAt: r.syncedAt,
@@ -194,7 +206,6 @@ export class ProductsService {
       inventoryBalance, // [] nếu chưa set misaModel hoặc không tìm thấy trong MISA
     };
   }
-
 
   // async findByCategory(categorySlug: string) {
   //   return await this.productRepository.find({
@@ -241,46 +252,137 @@ export class ProductsService {
   //   return this.productRepository.save(product);
   // }
 
+  // async update(id: string, updateProductDto: UpdateProductDto) {
+  //   const { translations, categoryId, ...productData } = updateProductDto;
+
+  //   // 1. Tìm sản phẩm hiện tại (bao gồm cả categoryId cũ để so sánh)
+  //   const product = await this.productRepository.findOne({
+  //     where: { id },
+  //     relations: ['category'],
+  //   });
+
+  //   if (!product) throw new NotFoundException('Không tìm thấy sản phẩm');
+
+  //   // 2. Kiểm tra nếu có sự thay đổi về Danh mục (categoryId)
+  //   if (
+  //     categoryId &&
+  //     (!product.category || product.category.id !== categoryId)
+  //   ) {
+  //     // Tìm MAX order của danh mục MỚI
+  //     const queryBuilder = this.productRepository
+  //       .createQueryBuilder('product')
+  //       .select('MAX(product.order)', 'maxOrder')
+  //       .where('product.categoryId = :categoryId', { categoryId });
+
+  //     const result = await queryBuilder.getRawOne();
+  //     const maxOrder = result.maxOrder ? parseInt(result.maxOrder) : 0;
+
+  //     // Gán danh mục mới và order mới cho sản phẩm
+  //     product.category = { id: categoryId } as any;
+  //     product.order = maxOrder + 1;
+  //   }
+
+  //   // 3. Cập nhật các thông tin cơ bản khác
+  //   Object.assign(product, productData);
+
+  //   // 4. Xử lý Translations (Nếu có)
+  //   if (translations) {
+  //     product.translations = translations as any;
+  //   }
+
+  //   // 5. Lưu lại (TypeORM save sẽ tự động xử lý insert/update cho các quan hệ đã cascade)
+  //   return this.productRepository.save(product);
+  // }
+
+  // async update(id: string, updateProductDto: UpdateProductDto) {
+  //   const { translations, categoryId, ...productData } = updateProductDto;
+
+  //   // 1. Tìm sản phẩm (Chỉ lấy các field cơ bản và relation cần thiết để update)
+  //   const product = await this.productRepository.findOne({
+  //     where: { id },
+  //     relations: ['category', 'translations'], // Load translations để TypeORM biết cái nào cần update/delete
+  //   });
+
+  //   if (!product) throw new NotFoundException('Không tìm thấy sản phẩm');
+
+  //   // 2. Xử lý logic Order nếu đổi Category
+  //   if (
+  //     categoryId &&
+  //     (!product.category || product.category.id !== categoryId)
+  //   ) {
+  //     const result = await this.productRepository
+  //       .createQueryBuilder('product')
+  //       .select('MAX(product.order)', 'maxOrder')
+  //       .where('product.categoryId = :categoryId', { categoryId })
+  //       .getRawOne();
+
+  //     const maxOrder = result.maxOrder ? parseInt(result.maxOrder) : 0;
+  //     product.category = { id: categoryId } as any;
+  //     product.order = maxOrder + 1;
+  //   }
+
+  //   // 3. Cập nhật các thông tin cơ bản (bao gồm cả misaModel)
+  //   Object.assign(product, productData);
+
+  //   // 4. Xử lý Translations
+  //   // Lưu ý: Đảm bảo Entity Product có { cascade: true } ở translations
+  //   if (translations) {
+  //     product.translations = translations as any;
+  //   }
+
+  //   try {
+  //     // 5. Lưu lại
+  //     return await this.productRepository.save(product);
+  //   } catch (error) {
+  //     // Log lỗi chi tiết để debug
+  //     console.error('Update Product Error:', error);
+  //     // throw new Error(`Cập nhật thất bại: ${error.message}`);
+  //   }
+  // }
+
   async update(id: string, updateProductDto: UpdateProductDto) {
     const { translations, categoryId, ...productData } = updateProductDto;
 
-    // 1. Tìm sản phẩm hiện tại (bao gồm cả categoryId cũ để so sánh)
+    // 1. Tìm sản phẩm (Chỉ lấy các field cơ bản và relation cần thiết để update)
     const product = await this.productRepository.findOne({
       where: { id },
-      relations: ['category'],
+      relations: ['category', 'translations'], // Load translations để TypeORM biết cái nào cần update/delete
     });
 
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm');
 
-    // 2. Kiểm tra nếu có sự thay đổi về Danh mục (categoryId)
+    // 2. Xử lý logic Order nếu đổi Category
     if (
       categoryId &&
       (!product.category || product.category.id !== categoryId)
     ) {
-      // Tìm MAX order của danh mục MỚI
-      const queryBuilder = this.productRepository
+      const result = await this.productRepository
         .createQueryBuilder('product')
         .select('MAX(product.order)', 'maxOrder')
-        .where('product.categoryId = :categoryId', { categoryId });
+        .where('product.categoryId = :categoryId', { categoryId })
+        .getRawOne();
 
-      const result = await queryBuilder.getRawOne();
       const maxOrder = result.maxOrder ? parseInt(result.maxOrder) : 0;
-
-      // Gán danh mục mới và order mới cho sản phẩm
       product.category = { id: categoryId } as any;
       product.order = maxOrder + 1;
     }
 
-    // 3. Cập nhật các thông tin cơ bản khác
+    // 3. Cập nhật các thông tin cơ bản (bao gồm cả misaModel)
     Object.assign(product, productData);
 
-    // 4. Xử lý Translations (Nếu có)
+    // 4. Xử lý Translations
+    // Lưu ý: Đảm bảo Entity Product có { cascade: true } ở translations
     if (translations) {
       product.translations = translations as any;
     }
 
-    // 5. Lưu lại (TypeORM save sẽ tự động xử lý insert/update cho các quan hệ đã cascade)
-    return this.productRepository.save(product);
+    try {
+      // 5. Lưu lại
+      return await this.productRepository.save(product);
+    } catch (error) {
+      // Log lỗi chi tiết để debug
+      console.error('Update Product Error:', error);
+    }
   }
 
   async remove(id: string) {
@@ -716,9 +818,9 @@ export class ProductsService {
    */
   async getInventoryBalance(
     stockId?: string,
-    misaModelFilter?: string,  // VD: "MF", "GT" → lọc sản phẩm có misaModel khớp prefix đó
+    misaModelFilter?: string, // VD: "MF", "GT" → lọc sản phẩm có misaModel khớp prefix đó
     page: number = 1,
-    limit: number = 50,
+    limit: number = 50
   ) {
     const skip = (page - 1) * limit;
 
@@ -763,25 +865,24 @@ export class ProductsService {
          AND (
            inv."inventoryItemCode" = p."misaModel"
            OR inv."inventoryItemCode" LIKE p."misaModel" || '-%'
-         )`,
+         )`
       )
-      .where('p."misaModel" IS NOT NULL')
+      .where('p."misaModel" IS NOT NULL');
 
     // Lọc theo misaModel prefix (nếu có)
     // VD: misaModelFilter = "MF" → chỉ lấy products có misaModel = "MF" hoặc bắt đầu bằng "MF-"
     if (misaModelFilter) {
-      qb.andWhere(
-        `(p."misaModel" = :mf OR p."misaModel" LIKE :mfPrefix)`,
-        { mf: misaModelFilter, mfPrefix: `${misaModelFilter}-%` },
-      );
+      qb.andWhere(`(p."misaModel" = :mf OR p."misaModel" LIKE :mfPrefix)`, {
+        mf: misaModelFilter,
+        mfPrefix: `${misaModelFilter}-%`,
+      });
     }
 
     // Lọc theo kho cụ thể (nếu có)
     if (stockId) {
-      qb.andWhere(
-        '(inv."stockId" = :stockId OR inv."stockId" IS NULL)',
-        { stockId },
-      );
+      qb.andWhere('(inv."stockId" = :stockId OR inv."stockId" IS NULL)', {
+        stockId,
+      });
     }
 
     // Query count (để phân trang)
@@ -791,7 +892,7 @@ export class ProductsService {
     if (misaModelFilter) {
       totalQb.andWhere(
         `(p."misaModel" = :mf OR p."misaModel" LIKE :mfPrefix)`,
-        { mf: misaModelFilter, mfPrefix: `${misaModelFilter}-%` },
+        { mf: misaModelFilter, mfPrefix: `${misaModelFilter}-%` }
       );
     }
     const total = await totalQb.getCount();
@@ -805,7 +906,7 @@ export class ProductsService {
       .getRawMany();
 
     // Gắn thông tin tên sản phẩm từ translations (vi)
-    const productIds = [...new Set(rows.map((r) => r.productId))];
+    const productIds = [...new Set(rows.map(r => r.productId))];
     const productsWithNames = await this.productRepository.find({
       where: { id: In(productIds) },
       relations: ['translations'],
@@ -813,15 +914,15 @@ export class ProductsService {
     });
 
     const nameMap = new Map(
-      productsWithNames.map((p2) => [
+      productsWithNames.map(p2 => [
         p2.id,
-        p2.translations?.find((t) => t.languageCode === 'vi')?.name ||
+        p2.translations?.find(t => t.languageCode === 'vi')?.name ||
           p2.translations?.[0]?.name ||
           p2.id,
-      ]),
+      ])
     );
 
-    const data = rows.map((r) => ({
+    const data = rows.map(r => ({
       productId: r.productId,
       productName: nameMap.get(r.productId) ?? r.productId,
       misaModel: r.misaModel,
@@ -835,11 +936,16 @@ export class ProductsService {
       inventoryItemCode: r.inventoryItemCode,
       inventoryItemName: r.inventoryItemName,
       unitName: r.unitName,
-      closingQuantity: r.closingQuantity != null ? parseFloat(r.closingQuantity) : null,
-      openingQuantity: r.openingQuantity != null ? parseFloat(r.openingQuantity) : null,
-      totalInQuantity: r.totalInQuantity != null ? parseFloat(r.totalInQuantity) : null,
-      totalOutQuantity: r.totalOutQuantity != null ? parseFloat(r.totalOutQuantity) : null,
-      closingAmount: r.closingAmount != null ? parseFloat(r.closingAmount) : null,
+      closingQuantity:
+        r.closingQuantity != null ? parseFloat(r.closingQuantity) : null,
+      openingQuantity:
+        r.openingQuantity != null ? parseFloat(r.openingQuantity) : null,
+      totalInQuantity:
+        r.totalInQuantity != null ? parseFloat(r.totalInQuantity) : null,
+      totalOutQuantity:
+        r.totalOutQuantity != null ? parseFloat(r.totalOutQuantity) : null,
+      closingAmount:
+        r.closingAmount != null ? parseFloat(r.closingAmount) : null,
       fromDate: r.fromDate,
       toDate: r.toDate,
       syncedAt: r.syncedAt,
