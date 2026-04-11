@@ -578,8 +578,10 @@ export class MisaDataSourceService {
     for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
       const batch = toInsert.slice(i, i + BATCH_SIZE);
       try {
-        await config.repository.createQueryBuilder().insert().into(config.entityClass).values(batch as any).orIgnore().execute();
-        result.created += batch.length;
+        const insertResult = await config.repository.createQueryBuilder().insert().into(config.entityClass).values(batch as any).orIgnore().execute();
+        // Dùng số dòng thực sự được insert (orIgnore có thể bỏ qua trùng)
+        const actualInserted = insertResult.identifiers?.filter(id => id && Object.keys(id).length > 0).length ?? batch.length;
+        result.created += actualInserted;
       } catch (error: any) {
         this.logger.error(`Lỗi bulk insert batch ${i}-${i + batch.length}:`, error.message);
         result.errors += batch.length;
@@ -619,6 +621,7 @@ export class MisaDataSourceService {
       'priority', 'localDeliveryStatus', 'saleType', 'receiverName', 'receiverPhone',
       'specificAddress', 'orderWorkflowStatus', 'saleAdminId', 'saleAdminName',
       'saleAdminSubmittedAt', 'approvedById', 'approvedByName', 'approvedAt', 'approvalNote',
+      'syncedAt', // Luôn thay đổi theo thời gian sync, không dùng để so sánh dữ liệu
     ];
     const dateFields = ['misaModifiedDate', 'deliveryDate', 'expectedDate'];
     const changes: Record<string, { old: any; new: any }> = {};
@@ -790,14 +793,213 @@ export class MisaDataSourceService {
 
   // ==================== ENTITY-SPECIFIC QUERIES ====================
 
-  async getCustomers(page = 1, limit = 50, search?: string): Promise<{ data: MisaCustomer[]; total: number }> {
+  /**
+   * Tính rank khách hàng dựa trên doanh thu trung bình/tháng từ tổng các đơn hàng (totalAmountOc).
+   * Công thức: tổng totalAmountOc / số tháng (từ đơn đầu tiên đến nay, tối thiểu 1 tháng).
+   *
+   * Rank A: >= 500 triệu/tháng
+   * Rank B: >= 300 triệu/tháng
+   * Rank C: >= 150 triệu/tháng
+   * Rank D: < 150 triệu/tháng
+   */
+  private computeCustomerRank(orders: MisaSaOrder[]): {
+    rank: 'A' | 'B' | 'C' | 'D';
+    totalRevenue: number;
+    avgMonthlyRevenue: number;
+    currentMonthRevenue: number;
+    orderCount: number;
+  } {
+    if (orders.length === 0) {
+      return { rank: 'D', totalRevenue: 0, avgMonthlyRevenue: 0, currentMonthRevenue: 0, orderCount: 0 };
+    }
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth(); // 0-indexed
+
+    // Tổng doanh thu tất cả đơn hàng
+    const totalRevenue = orders.reduce((sum, o) => sum + Number(o.totalAmountOc || 0), 0);
+
+    // Doanh thu tháng hiện tại
+    const currentMonthRevenue = orders
+      .filter(o => {
+        if (!o.refDate) return false;
+        const d = new Date(o.refDate);
+        return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+      })
+      .reduce((sum, o) => sum + Number(o.totalAmountOc || 0), 0);
+
+    // Tìm ngày đơn hàng cũ nhất để tính số tháng
+    const oldestDate = orders.reduce((oldest, o) => {
+      const d = o.refDate ? new Date(o.refDate) : now;
+      return d < oldest ? d : oldest;
+    }, now);
+
+    // Số tháng từ đơn đầu tiên đến nay (tối thiểu 1 tháng)
+    const diffMs = now.getTime() - oldestDate.getTime();
+    const diffMonths = Math.max(1, diffMs / (1000 * 60 * 60 * 24 * 30.44));
+
+    // Doanh thu trung bình/tháng (đơn vị: triệu VND)
+    const avgMonthlyRevenue = totalRevenue / diffMonths / 1_000_000;
+
+    let rank: 'A' | 'B' | 'C' | 'D';
+    if (avgMonthlyRevenue >= 500) {
+      rank = 'A';
+    } else if (avgMonthlyRevenue >= 300) {
+      rank = 'B';
+    } else if (avgMonthlyRevenue >= 150) {
+      rank = 'C';
+    } else {
+      rank = 'D';
+    }
+
+    return {
+      rank,
+      totalRevenue,
+      avgMonthlyRevenue: Math.round(avgMonthlyRevenue * 100) / 100,
+      currentMonthRevenue: Math.round(currentMonthRevenue * 100) / 100,
+      orderCount: orders.length,
+    };
+  }
+
+  /**
+   * Tính lại và lưu rank, avgMonthlyRevenue, currentMonthRevenue cho TẤT CẢ khách hàng.
+   * Nên gọi sau mỗi lần sync dữ liệu từ MISA hoặc định kỳ qua cron job.
+   * Trả về số lượng khách hàng đã được cập nhật.
+   */
+  async recalculateCustomerRanks(): Promise<{ updated: number; errors: number }> {
+    const result = { updated: 0, errors: 0 };
+
+    // Lấy tất cả khách hàng có taxCode
+    const customers = await this.customerRepository
+      .createQueryBuilder('customer')
+      .where('customer.deletedAt IS NULL')
+      .getMany();
+
+    const taxCodes = customers
+      .map(c => c.taxCode)
+      .filter((tc): tc is string => !!tc);
+
+    // Batch query tất cả orders liên quan (chỉ tính đơn không phải draft)
+    const ordersMap = new Map<string, MisaSaOrder[]>();
+    if (taxCodes.length > 0) {
+      const orders = await this.saOrderRepository
+        .createQueryBuilder('order')
+        .where('order.deletedAt IS NULL')
+        .andWhere('order.accountObjectTaxCode IN (:...taxCodes)', { taxCodes })
+        .andWhere("order.orderWorkflowStatus != 'draft'")
+        .select([
+          'order.accountObjectTaxCode',
+          'order.refDate',
+          'order.totalAmountOc',
+        ])
+        .getMany();
+
+      for (const order of orders) {
+        if (!order.accountObjectTaxCode) continue;
+        if (!ordersMap.has(order.accountObjectTaxCode)) {
+          ordersMap.set(order.accountObjectTaxCode, []);
+        }
+        ordersMap.get(order.accountObjectTaxCode)!.push(order);
+      }
+    }
+
+    // Cập nhật từng khách hàng
+    const BATCH_SIZE = 100;
+    const now = new Date();
+
+    for (let i = 0; i < customers.length; i += BATCH_SIZE) {
+      const batch = customers.slice(i, i + BATCH_SIZE);
+      await Promise.all(
+        batch.map(async customer => {
+          try {
+            const customerOrders = customer.taxCode
+              ? (ordersMap.get(customer.taxCode) ?? [])
+              : [];
+            const rankInfo = this.computeCustomerRank(customerOrders);
+            await this.customerRepository.update(customer.id, {
+              rank: rankInfo.rank,
+              avgMonthlyRevenue: rankInfo.avgMonthlyRevenue,
+              currentMonthRevenue: rankInfo.currentMonthRevenue,
+              rankUpdatedAt: now,
+            });
+            result.updated++;
+          } catch (err: any) {
+            this.logger.error(`Lỗi cập nhật rank cho customer id=${customer.id}:`, err.message);
+            result.errors++;
+          }
+        })
+      );
+    }
+
+    this.logger.log(`Recalculate rank xong: ${result.updated} cập nhật, ${result.errors} lỗi`);
+    return result;
+  }
+
+  async getCustomers(
+    page = 1,
+    limit = 50,
+    search?: string,
+    rank?: string,
+  ): Promise<{
+    data: (MisaCustomer & { orders: MisaSaOrder[]; orderCount: number; totalRevenue: number })[];
+    total: number;
+  }> {
     const qb = this.customerRepository.createQueryBuilder('customer').where('customer.deletedAt IS NULL');
     if (search) {
-      qb.andWhere('(customer.accountObjectCode ILIKE :search OR customer.accountObjectName ILIKE :search OR customer.tel ILIKE :search)', { search: `%${search}%` });
+      qb.andWhere(
+        '(customer.accountObjectCode ILIKE :search OR customer.accountObjectName ILIKE :search OR customer.tel ILIKE :search)',
+        { search: `%${search}%` },
+      );
     }
-    qb.orderBy('customer.accountObjectCode', 'ASC').skip((page - 1) * limit).take(limit);
-    const [data, total] = await qb.getManyAndCount();
-    return { data, total };
+    // Lọc theo rank (đọc từ DB)
+    if (rank && ['A', 'B', 'C', 'D'].includes(rank.toUpperCase())) {
+      qb.andWhere('customer.rank = :rank', { rank: rank.toUpperCase() });
+    }
+    qb.orderBy('customer.rank', 'ASC')
+      .addOrderBy('customer.avgMonthlyRevenue', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+    const [customers, total] = await qb.getManyAndCount();
+
+    // Lấy danh sách taxCode có giá trị để query đơn hàng
+    const taxCodes = customers
+      .map(c => c.taxCode)
+      .filter((tc): tc is string => !!tc);
+
+    // Map taxCode -> orders (chỉ lấy đơn không phải draft)
+    const ordersMap = new Map<string, MisaSaOrder[]>();
+    if (taxCodes.length > 0) {
+      const orders = await this.saOrderRepository
+        .createQueryBuilder('order')
+        .where('order.deletedAt IS NULL')
+        .andWhere('order.accountObjectTaxCode IN (:...taxCodes)', { taxCodes })
+        .andWhere("order.orderWorkflowStatus != 'draft'")
+        .orderBy('order.refDate', 'DESC')
+        .getMany();
+
+      for (const order of orders) {
+        if (!order.accountObjectTaxCode) continue;
+        if (!ordersMap.has(order.accountObjectTaxCode)) {
+          ordersMap.set(order.accountObjectTaxCode, []);
+        }
+        ordersMap.get(order.accountObjectTaxCode)!.push(order);
+      }
+    }
+
+    // Gắn orders vào từng khách hàng (rank đọc từ DB, đã được persist)
+    const data = customers.map(customer => {
+      const customerOrders = customer.taxCode ? (ordersMap.get(customer.taxCode) ?? []) : [];
+      const totalRevenue = customerOrders.reduce((sum, o) => sum + Number(o.totalAmountOc || 0), 0);
+      return {
+        ...customer,
+        orders: customerOrders,
+        orderCount: customerOrders.length,
+        totalRevenue,
+      };
+    });
+
+    return { data: data as any, total };
   }
 
   async getCustomerById(id: number): Promise<MisaCustomer | null> {
@@ -818,8 +1020,12 @@ export class MisaDataSourceService {
     return this.productRepository.findOne({ where: { id, deletedAt: IsNull() } });
   }
 
-  async getStocks(page = 1, limit = 50, search?: string): Promise<{ data: MisaStock[]; total: number }> {
+  async getStocks(page = 1, limit = 50, search?: string, includeInactive = false): Promise<{ data: MisaStock[]; total: number }> {
     const qb = this.stockRepository.createQueryBuilder('stock').where('stock.deletedAt IS NULL');
+    // Mặc định chỉ lấy kho còn hoạt động (inactive = false), trừ khi có yêu cầu lấy tất cả
+    if (!includeInactive) {
+      qb.andWhere('stock.inactive = :inactive', { inactive: false });
+    }
     if (search) {
       qb.andWhere('(stock.stockCode ILIKE :search OR stock.stockName ILIKE :search)', { search: `%${search}%` });
     }

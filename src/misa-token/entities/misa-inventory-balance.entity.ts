@@ -109,6 +109,7 @@ export class MisaInventoryBalance extends EntityHelper {
       totalOutAmount: parseFloat(data.total_out_amount) || 0,
       purchaseQuantity: parseFloat(data.purchase_quantity) || 0,
       saleQuantity: parseFloat(data.sale_quantity) || 0,
+      syncedAt: new Date(),
     };
   }
 }

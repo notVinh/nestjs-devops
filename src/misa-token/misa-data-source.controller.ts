@@ -259,18 +259,32 @@ export class MisaDataSourceController {
 
   // ========== Customer APIs ==========
 
+  @Post('customers/recalculate-ranks')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Tính lại rank & doanh thu cho toàn bộ khách hàng và lưu vào DB' })
+  async recalculateCustomerRanks(): Promise<BaseResponse<{ updated: number; errors: number }>> {
+    const result = await this.misaDataSourceService.recalculateCustomerRanks();
+    return ResponseHelper.success(
+      result,
+      `Cập nhật rank xong: ${result.updated} khách hàng`,
+      HTTP_STATUS_CODE.OK
+    );
+  }
+
   @Get('customers/list')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Get all customers from database' })
+  @ApiOperation({ summary: 'Get all customers from database (rank đọc từ DB, filter được theo rank)' })
   async getCustomers(
     @Query('page') page = 1,
     @Query('limit') limit = 50,
-    @Query('search') search?: string
-  ): Promise<BaseResponse<{ data: MisaCustomer[]; total: number }>> {
+    @Query('search') search?: string,
+    @Query('rank') rank?: string,
+  ): Promise<BaseResponse<{ data: (MisaCustomer & { orders: any[]; orderCount: number; totalRevenue: number })[]; total: number }>> {
     const result = await this.misaDataSourceService.getCustomers(
       +page,
       +limit,
-      search
+      search,
+      rank,
     );
     return ResponseHelper.success(
       result,
@@ -337,12 +351,14 @@ export class MisaDataSourceController {
   async getStocks(
     @Query('page') page = 1,
     @Query('limit') limit = 50,
-    @Query('search') search?: string
+    @Query('search') search?: string,
+    @Query('includeInactive') includeInactive?: string
   ): Promise<BaseResponse<{ data: MisaStock[]; total: number }>> {
     const result = await this.misaDataSourceService.getStocks(
       +page,
       +limit,
-      search
+      search,
+      includeInactive === 'true'
     );
     return ResponseHelper.success(
       result,

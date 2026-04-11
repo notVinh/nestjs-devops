@@ -94,6 +94,24 @@ export class MisaCustomer extends EntityHelper {
   @Column({ type: 'boolean', default: false })
   inactive: boolean;
 
+  // ====== Rank & Doanh thu (được tính toán và lưu lại) ======
+
+  /** Rank khách hàng: A / B / C / D (dựa trên doanh thu trung bình/tháng) */
+  @Column({ type: 'varchar', length: 1, default: 'D', nullable: true })
+  rank: 'A' | 'B' | 'C' | 'D' | null;
+
+  /** Doanh thu tháng hiện tại (tổng totalAmountOc trong tháng này, đơn vị: VND) */
+  @Column({ type: 'decimal', precision: 18, scale: 2, default: 0 })
+  currentMonthRevenue: number;
+
+  /** Doanh thu trung bình/tháng dùng để xếp rank (đơn vị: triệu VND) */
+  @Column({ type: 'decimal', precision: 18, scale: 2, default: 0 })
+  avgMonthlyRevenue: number;
+
+  /** Thời điểm cập nhật rank lần cuối */
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  rankUpdatedAt: Date | null;
+
   // ====== Mapping từ MISA response ======
   /**
    * Tạo MisaCustomer từ dữ liệu MISA API response
