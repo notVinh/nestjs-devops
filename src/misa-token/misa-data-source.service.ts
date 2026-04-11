@@ -277,6 +277,48 @@ export class MisaDataSourceService {
     });
   }
 
+  /**
+   * Dọn sạch bản ghi tồn kho bị lặp do lỗi cũ (recordId dùng detail_id không ổn định).
+   * Giữ lại bản ghi mới nhất (id cao nhất) cho mỗi cặp (stockId + inventoryItemId),
+   * xóa tất cả bản ghi cũ hơn.
+   */
+  async cleanupDuplicateInventoryBalance(): Promise<{ deleted: number; kept: number }> {
+    // Tìm tất cả các cặp (stockId, inventoryItemId) có nhiều hơn 1 bản ghi
+    const duplicates = await this.inventoryBalanceRepository
+      .createQueryBuilder('inv')
+      .select('inv.stockId', 'stockId')
+      .addSelect('inv.inventoryItemId', 'inventoryItemId')
+      .addSelect('MAX(inv.id)', 'maxId')   // giữ lại bản ghi mới nhất
+      .addSelect('COUNT(inv.id)', 'cnt')
+      .groupBy('inv.stockId')
+      .addGroupBy('inv.inventoryItemId')
+      .having('COUNT(inv.id) > 1')        // chỉ lấy nhóm bị trùng
+      .getRawMany();
+
+    if (duplicates.length === 0) {
+      return { deleted: 0, kept: 0 };
+    }
+
+    let totalDeleted = 0;
+    for (const dup of duplicates) {
+      // Xóa tất cả bản ghi NGOẠI TRỪ bản ghi có id = maxId
+      const deleteResult = await this.inventoryBalanceRepository
+        .createQueryBuilder()
+        .delete()
+        .from(MisaInventoryBalance)
+        .where('"stockId" = :stockId AND "inventoryItemId" = :inventoryItemId AND id != :maxId', {
+          stockId: dup.stockId,
+          inventoryItemId: dup.inventoryItemId,
+          maxId: parseInt(dup.maxId),
+        })
+        .execute();
+      totalDeleted += deleteResult.affected || 0;
+    }
+
+    this.logger.log(`[cleanupDuplicateInventoryBalance] Đã xóa ${totalDeleted} bản ghi trùng, giữ lại ${duplicates.length} nhóm duy nhất`);
+    return { deleted: totalDeleted, kept: duplicates.length };
+  }
+
   // ==================== MAIN SYNC METHOD ====================
 
   async startSync(dataSourceId: number): Promise<{
@@ -382,11 +424,25 @@ export class MisaDataSourceService {
           } catch (e: any) {}
         }
 
-        if (stockApiResult.success && stockApiResult.data) {
+        if (stockApiResult.success && Array.isArray(stockApiResult.data) && stockApiResult.data.length > 0) {
           records = stockApiResult.data;
           total = records.length;
           apiResult = { success: true, data: records, total };
           await addLog('success', `Đã lấy thành công ${records.length} bản ghi tồn kho tổng hợp.`);
+        } else if (stockApiResult.success && Array.isArray(stockApiResult.data) && stockApiResult.data.length === 0) {
+          // API trả về thành công nhưng 0 bản ghi — kiểm tra xem DB có dữ liệu không
+          const existingCount = await this.inventoryBalanceRepository.count();
+          if (existingCount > 0) {
+            // DB đang có dữ liệu, API trả về rỗng → có thể lỗi tạm thời phía MISA
+            // Dừng lại để tránh sync tiếp theo thấy toàn bộ là "mới" và tạo bản ghi lặp
+            await addLog('warning', `API trả về 0 bản ghi nhưng DB hiện có ${existingCount} bản ghi tồn kho. Bỏ qua lần sync này để tránh mất dữ liệu (có thể API MISA đang tạm lỗi).`);
+            await this.updateSyncHistoryError(syncHistory, `API trả về 0 bản ghi (nghi ngờ lỗi tạm thời), DB đang có ${existingCount} bản ghi`);
+            return { success: false, message: `API trả về 0 bản ghi dù DB đang có ${existingCount} bản ghi. Thử lại sau.`, syncId: syncHistory.id };
+          } else {
+            // DB cũng chưa có gì → bình thường (lần đầu sync nhưng chưa có dữ liệu)
+            await addLog('warning', `API trả về 0 bản ghi tồn kho. DB cũng chưa có dữ liệu.`);
+            apiResult = { success: true, data: [], total: 0 };
+          }
         } else {
           apiResult = stockApiResult;
         }

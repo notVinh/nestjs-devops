@@ -9,7 +9,7 @@ import { EntityHelper } from 'src/utils/entity-helper';
 @Entity('misaInventoryBalance')
 export class MisaInventoryBalance extends EntityHelper {
   @Column({ type: 'varchar', length: 150, unique: true })
-  recordId: string; // Kết hợp stockId + inventoryItemId để dùng cho bulkUpsert
+  recordId: string; // Kết hợp stockId + inventoryItemId (không dùng detail_id vì không ổn định giữa các lần sync)
   // ====== Thông tin kho ======
   @Column({ type: 'uuid' })
   @Index()
@@ -89,7 +89,10 @@ export class MisaInventoryBalance extends EntityHelper {
    */
   static fromMisaResponse(data: Record<string, any>): Partial<MisaInventoryBalance> {
     return {
-      recordId: `${data.stock_id}_${data.inventory_item_id}_${data.detail_id || '0'}`,
+      // Chỉ dùng stock_id + inventory_item_id để đảm bảo recordId ổn định giữa các lần sync.
+      // Không dùng detail_id vì MISA có thể trả về giá trị khác nhau giữa các lần gọi API,
+      // dẫn đến cùng 1 sản phẩm trong cùng 1 kho bị insert thành nhiều dòng trùng lặp.
+      recordId: `${data.stock_id}_${data.inventory_item_id}`,
       stockId: data.stock_id,
       stockCode: data.stock_code,
       stockName: data.stock_name,

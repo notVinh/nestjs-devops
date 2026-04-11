@@ -383,6 +383,18 @@ export class MisaDataSourceController {
     );
   }
 
+  @Post('inventory-balance/cleanup-duplicates')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Dọn sạch bản ghi tồn kho bị lặp do lỗi recordId cũ (chỉ chạy 1 lần)' })
+  async cleanupDuplicateInventoryBalance(): Promise<BaseResponse<{ deleted: number; kept: number }>> {
+    const result = await this.misaDataSourceService.cleanupDuplicateInventoryBalance();
+    return ResponseHelper.success(
+      result,
+      `Đã xóa ${result.deleted} bản ghi trùng lặp, giữ lại ${result.kept} nhóm`,
+      HTTP_STATUS_CODE.OK
+    );
+  }
+
   @Get('stocks/:id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get stock by ID' })
