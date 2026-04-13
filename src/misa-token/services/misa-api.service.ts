@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
+import * as https from 'https';
 import { MisaApiConfig } from '../entities/misa-api-config.entity';
 import { MisaTokenService } from '../misa-token.service';
 
@@ -116,6 +117,9 @@ export class MisaApiService {
       const response = await axios.post(url, requestBody, {
         headers: this.buildMisaHeaders(token, apiConfig),
         timeout: 60000,
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: false
+        })
       });
 
       const responseData = response.data;
