@@ -169,7 +169,17 @@ export class MisaApiService {
         };
       }
 
-      const message = errorData?.message || errorData?.Message || error.message || 'Unknown error';
+      let message = errorData?.message || errorData?.Message || error.message || 'Unknown error';
+      
+      // Xử lý riêng lỗi bảo trì từ MISA
+      if (status === 503 || (typeof errorData === 'string' && errorData.includes('maintenance'))) {
+        message = 'Đang có nhiều người đang kéo dữ liệu cùng lúc. Vui lòng thử lại sau.';
+      } else if (typeof errorData === 'string') {
+        // Tránh in ra cả cục HTML dài
+        const shortData = errorData.substring(0, 150).replace(/\n/g, ' ');
+        message = `${message} - ${shortData}...`;
+      }
+
       return {
         success: false,
         isAuthError,
