@@ -591,11 +591,34 @@ export class MisaTokenService implements OnModuleInit {
           // Thử lại 5 lần, mỗi lần cách nhau 2s
           amisSessionToken = await page.evaluate(() => {
             return (
-              localStorage.getItem('smeToken') || localStorage.getItem('token')
+              localStorage.getItem('smeToken') || 
+              localStorage.getItem('token') || 
+              localStorage.getItem('access_token') || 
+              sessionStorage.getItem('access_token') || 
+              sessionStorage.getItem('smeToken')
             );
           });
 
           if (amisSessionToken) break;
+
+          // Thử tự động đóng các popup cản trở (nếu có popup rác, thông báo cập nhật, v.v.)
+          try {
+            await page.evaluate(() => {
+              // Click các nút Đóng
+              const buttons = Array.from(document.querySelectorAll('button'));
+              buttons.forEach(btn => {
+                const text = btn.textContent?.toLowerCase() || '';
+                if (text === 'đóng') {
+                  (btn as HTMLElement).click();
+                }
+              });
+              // Click các icon X
+              const closeIcons = Array.from(document.querySelectorAll('.icon-close, .icon-cancel, [class*="close"]'));
+              closeIcons.forEach(icon => {
+                (icon as HTMLElement).click();
+              });
+            });
+          } catch(e) {}
 
           await new Promise(resolve => setTimeout(resolve, 2000));
           retryCount++;
@@ -603,7 +626,11 @@ export class MisaTokenService implements OnModuleInit {
 
         amisSessionToken = await page.evaluate(() => {
           return (
-            localStorage.getItem('smeToken') || localStorage.getItem('token')
+              localStorage.getItem('smeToken') || 
+              localStorage.getItem('token') || 
+              localStorage.getItem('access_token') || 
+              sessionStorage.getItem('access_token') || 
+              sessionStorage.getItem('smeToken')
           );
         });
       }
@@ -613,7 +640,16 @@ export class MisaTokenService implements OnModuleInit {
       if (amisSessionToken) {
         await this.emitLog('success', 'Đã lấy được Token!');
       } else {
-        throw new Error('Không thể tìm thấy token ở bất kỳ trang nào.');
+        // Log bổ sung toàn bộ danh sách biến có trong localStorage để phục vụ debug
+        const storageKeys = await page.evaluate(() => {
+           return {
+              local: Object.keys(localStorage),
+              session: Object.keys(sessionStorage)
+           };
+        });
+        await this.emitLog('warning', `LocalStorage keys: ${JSON.stringify(storageKeys.local)}`);
+        await this.emitLog('warning', `SessionStorage keys: ${JSON.stringify(storageKeys.session)}`);
+        throw new Error('Không thể tìm thấy token ở bất kỳ trang nào. Đã in danh sách key ra log.');
       }
 
       await browser.close();

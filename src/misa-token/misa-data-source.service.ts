@@ -343,26 +343,28 @@ export class MisaDataSourceService {
     const { syncHistory, addLog } = await this.createSyncHistoryWithLogger(dataSourceId, dataSource.name);
 
     // Get token
-    await addLog('info', 'Đang kiểm tra token MISA...');
+    await addLog('info', 'Đang kiểm tra kết nối với Hệ thống MISA...');
     let token = await this.misaApiService.getToken();
 
     if (!token) {
-      await addLog('warning', 'Token MISA hết hạn hoặc không hợp lệ');
-      await addLog('info', 'Đang làm mới token MISA...');
+      await addLog('warning', 'Không tìm thấy Token hợp lệ trong hệ thống, hoặc Token đã bị MISA vô hiệu hóa.');
+      await addLog('info', 'Đang kích hoạt Bot (Puppeteer) để giả lập đăng nhập và xin cấp lại Token...');
       try {
         token = await this.misaApiService.refreshToken();
-        await addLog('success', 'Làm mới token MISA thành công!');
+        await addLog('success', 'Bot đã đăng nhập và thu thập được Token MISA mới!');
       } catch (error: any) {
         await addLog('error', `Lỗi làm mới token: ${error.message}`);
         await this.updateSyncHistoryError(syncHistory, 'Không thể lấy/làm mới token MISA');
         return { success: false, message: 'Không thể lấy token MISA. Vui lòng thử lại.', syncId: syncHistory.id };
       }
     } else {
-      await addLog('success', 'Token MISA hợp lệ');
+      await addLog('success', 'Đã tải thành công Token MISA còn hạn từ Database/Cache hệ thống.');
     }
 
     const url = dataSource.apiEndpoint || apiConfig.baseUrl;
     const requestBody = dataSource.buildRequestBody(1, undefined, undefined, apiConfig.branchId || '');
+
+    await addLog('info', `Cấu hình kết nối - Mã nhánh: ${apiConfig.branchId || 'Mặc định'}, URL: ${url}`);
 
     syncHistory.lastRequest = {
       url,
@@ -371,7 +373,7 @@ export class MisaDataSourceService {
     };
     await this.syncHistoryRepository.save(syncHistory);
 
-    await addLog('info', `Bắt đầu kéo dữ liệu ${dataSource.name}...`);
+    await addLog('info', `Bắt đầu quá trình tải danh sách [${dataSource.name}] từ MISA...`);
 
     let records: any[] = [];
     let total = 0;
@@ -415,7 +417,7 @@ export class MisaDataSourceService {
 
       try {
         let stockApiResult = await this.misaApiService.callMisaApi(url, clonedBody, token, apiConfig);
-        if (!stockApiResult.success && !syncHistory.lastResponseSample?.retried) {
+        if (!stockApiResult.success && stockApiResult.isAuthError && !syncHistory.lastResponseSample?.retried) {
           try {
             const newToken = await this.misaApiService.refreshToken();
             token = newToken;
@@ -452,19 +454,31 @@ export class MisaDataSourceService {
       }
     } else {
       // Logic bình thường
+      await addLog('info', `Đang gọi API tới máy chủ MISA tiến hành kéo dữ liệu...`);
       apiResult = await this.misaApiService.callMisaApi(url, requestBody, token, apiConfig);
 
+      if (!apiResult.success) {
+          const msaErrCode = apiResult.error?.code || 'N/A';
+          const msaErrMsg = apiResult.error?.message || 'Không rõ nguyên nhân';
+          await addLog('error', `Máy chủ MISA từ chối cung cấp dữ liệu. Mã lỗi: ${msaErrCode}, Phản hồi: ${msaErrMsg}`);
+          
+          if (!apiResult.isAuthError) {
+            const rawDetails = JSON.stringify(apiResult.error?.rawResponse || apiResult.error || {});
+            await addLog('error', `Yêu cầu thất bại không do Token. Chi tiết lỗi từ MISA: ${rawDetails}`);
+          }
+      }
+
       // Retry với token mới nếu lỗi
-      if (!apiResult.success && !syncHistory.lastResponseSample?.retried) {
-        await addLog('warning', 'Đang thử làm mới token và gọi lại...');
+      if (!apiResult.success && apiResult.isAuthError && !syncHistory.lastResponseSample?.retried) {
+        await addLog('warning', 'Nghi ngờ Token đã bị đá session do lỗi xác thực. Đang chỉ định Bot đi lấy Token mới...');
         try {
           const newToken = await this.misaApiService.refreshToken();
-          await addLog('success', 'Làm mới token thành công, đang thử lại...');
+          await addLog('success', 'Bot đã lấy được Token phục hồi, đang nối lại tiến trình kéo dữ liệu...');
           syncHistory.lastResponseSample = { retried: true };
           await this.syncHistoryRepository.save(syncHistory);
           apiResult = await this.misaApiService.callMisaApi(url, requestBody, newToken, apiConfig);
         } catch (error: any) {
-          await addLog('error', `Không thể làm mới token: ${error.message}`);
+          await addLog('error', `Nhờ Bot lấy lại Token nhưng thất bại: ${error.message}`);
         }
       }
     }

@@ -15,8 +15,10 @@ export interface MisaApiResult {
     message: string;
     exceptionId?: string;
     rawResponse?: any;
+    status?: number;
   };
   rawResponse?: any;
+  isAuthError?: boolean;
 }
 
 /**
@@ -128,8 +130,16 @@ export class MisaApiService {
       if (responseData?.Success === false) {
         const error = this.parseMisaError(responseData);
         this.logger.error('MISA API Error Response:', JSON.stringify(responseData, null, 2));
+        
+        const isAuthError =
+          error.code === 'NotAuthorize' ||
+          error.code === 'Unauthorized' ||
+          error.code === 'TokenExpired' ||
+          error.message?.includes('NotAuthorize');
+
         return {
           success: false,
+          isAuthError,
           error: { ...error, rawResponse: responseData },
         };
       }
@@ -138,19 +148,28 @@ export class MisaApiService {
       return { success: true, data: records, total, rawResponse: responseData };
     } catch (error: any) {
       const errorData = error.response?.data;
+      const status = error.response?.status;
+      const isAuthError =
+        status === 401 ||
+        status === 403 ||
+        errorData?.Code === 'NotAuthorize' ||
+        errorData?.Code === 'Unauthorized' ||
+        errorData?.Code === 'TokenExpired';
 
       if (errorData?.Success === false) {
         const parsedError = this.parseMisaError(errorData);
         return {
           success: false,
-          error: { ...parsedError, rawResponse: errorData },
+          isAuthError,
+          error: { ...parsedError, rawResponse: errorData, status },
         };
       }
 
       const message = errorData?.message || errorData?.Message || error.message || 'Unknown error';
       return {
         success: false,
-        error: { message, rawResponse: errorData },
+        isAuthError,
+        error: { message, rawResponse: errorData, status },
       };
     }
   }

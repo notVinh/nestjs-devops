@@ -198,12 +198,15 @@ export class ProductsService {
       }));
     }
 
+    const totalQuantity = inventoryBalance.reduce((sum, item) => sum + (item.closingQuantity || 0), 0);
+
     // 5. Trả về object product đã được "Proxy hóa" + kèm tồn kho
     return {
       ...product,
       images: mappedImages,
       translations: mappedTranslations,
       inventoryBalance, // [] nếu chưa set misaModel hoặc không tìm thấy trong MISA
+      totalQuantity,
     };
   }
 
@@ -464,29 +467,80 @@ export class ProductsService {
     const proxyBaseUrl = 'https://gtgsew.com/api/v1/files/proxy-image';
 
     // 3. Format lại dữ liệu trả về
-    const formattedData = data.map(prod => {
-      // Xử lý mảng ảnh (Nếu prod.images là mảng các string URL)
-      const mappedImages = (prod.images || []).map((imgUrl: string) => {
-        if (imgUrl && imgUrl.includes('viettelidc.com.vn')) {
-          return `${proxyBaseUrl}?url=${encodeURIComponent(imgUrl)}`;
+    const formattedData = await Promise.all(
+      data.map(async prod => {
+        // Xử lý mảng ảnh (Nếu prod.images là mảng các string URL)
+        const mappedImages = (prod.images || []).map((imgUrl: string) => {
+          if (imgUrl && imgUrl.includes('viettelidc.com.vn')) {
+            return `${proxyBaseUrl}?url=${encodeURIComponent(imgUrl)}`;
+          }
+          return imgUrl;
+        });
+
+        // Xử lý ảnh đại diện đơn lẻ (nếu có field thumbnail hoặc image riêng)
+        // let finalThumbnail = prod.image;
+        // if (prod.image && prod.image.includes('viettelidc.com.vn')) {
+        //   finalThumbnail = `${proxyBaseUrl}?url=${encodeURIComponent(prod.image)}`;
+        // }
+
+        // Lấy tồn kho từ misaInventoryBalance (nếu sản phẩm có misaModel)
+        let inventoryBalance: any[] = [];
+        if (prod.misaModel) {
+          const invRows = await this.inventoryBalanceRepository
+            .createQueryBuilder('inv')
+            .select([
+              'inv.stockId        AS "stockId"',
+              'inv.stockCode      AS "stockCode"',
+              'inv.stockName      AS "stockName"',
+              'inv.inventoryItemCode AS "inventoryItemCode"',
+              'inv.inventoryItemName AS "inventoryItemName"',
+              'inv.unitName       AS "unitName"',
+              'inv.closingQuantity  AS "closingQuantity"',
+              'inv.openingQuantity  AS "openingQuantity"',
+              'inv.totalInQuantity  AS "totalInQuantity"',
+              'inv.totalOutQuantity AS "totalOutQuantity"',
+              'inv.closingAmount    AS "closingAmount"',
+              'inv.fromDate        AS "fromDate"',
+              'inv.toDate          AS "toDate"',
+              'inv.syncedAt        AS "syncedAt"',
+            ])
+            .where(`inv.inventoryItemCode LIKE :search`, {
+              search: `${prod.misaModel}%`,
+            })
+            .orderBy('inv.stockCode', 'ASC')
+            .getRawMany();
+
+          inventoryBalance = invRows.map(r => ({
+            stockId: r.stockId,
+            stockCode: r.stockCode,
+            stockName: r.stockName,
+            inventoryItemCode: r.inventoryItemCode,
+            inventoryItemName: r.inventoryItemName,
+            unitName: r.unitName,
+            closingQuantity: r.closingQuantity != null ? parseFloat(r.closingQuantity) : null,
+            openingQuantity: r.openingQuantity != null ? parseFloat(r.openingQuantity) : null,
+            totalInQuantity: r.totalInQuantity != null ? parseFloat(r.totalInQuantity) : null,
+            totalOutQuantity: r.totalOutQuantity != null ? parseFloat(r.totalOutQuantity) : null,
+            closingAmount: r.closingAmount != null ? parseFloat(r.closingAmount) : null,
+            fromDate: r.fromDate,
+            toDate: r.toDate,
+            syncedAt: r.syncedAt,
+          }));
         }
-        return imgUrl;
-      });
 
-      // Xử lý ảnh đại diện đơn lẻ (nếu có field thumbnail hoặc image riêng)
-      // let finalThumbnail = prod.image;
-      // if (prod.image && prod.image.includes('viettelidc.com.vn')) {
-      //   finalThumbnail = `${proxyBaseUrl}?url=${encodeURIComponent(prod.image)}`;
-      // }
+        const totalQuantity = inventoryBalance.reduce((sum, item) => sum + (item.closingQuantity || 0), 0);
 
-      return {
-        ...prod,
-        // image: finalThumbnail,   // Ảnh chính đã qua proxy
-        images: mappedImages, // Mảng ảnh đã qua proxy
-        displayName:
-          prod.translations.find(t => t.languageCode === lang)?.name || prod.id,
-      };
-    });
+        return {
+          ...prod,
+          // image: finalThumbnail,   // Ảnh chính đã qua proxy
+          images: mappedImages, // Mảng ảnh đã qua proxy
+          displayName:
+            prod.translations.find(t => t.languageCode === lang)?.name || prod.id,
+          inventoryBalance,
+          totalQuantity,
+        };
+      })
+    );
 
     return {
       data: formattedData,
@@ -711,48 +765,99 @@ export class ProductsService {
     };
 
     // 3. Map lại toàn bộ kết quả để bọc Proxy
-    return products.map(prod => {
-      // Xử lý mảng images sản phẩm
-      const mappedImages = (prod.images || []).map((imgUrl: string) => {
-        if (imgUrl && imgUrl.includes('viettelidc.com.vn')) {
-          return `${proxyBaseUrl}?url=${encodeURIComponent(imgUrl)}`;
+    return await Promise.all(
+      products.map(async prod => {
+        // Xử lý mảng images sản phẩm
+        const mappedImages = (prod.images || []).map((imgUrl: string) => {
+          if (imgUrl && imgUrl.includes('viettelidc.com.vn')) {
+            return `${proxyBaseUrl}?url=${encodeURIComponent(imgUrl)}`;
+          }
+          return imgUrl;
+        });
+
+        // Xử lý ảnh đại diện đơn lẻ (nếu có)
+        // let finalThumbnail = prod.image;
+        // if (prod.image && prod.image.includes('viettelidc.com.vn')) {
+        //   finalThumbnail = `${proxyBaseUrl}?url=${encodeURIComponent(
+        //     prod.image
+        //   )}`;
+        // }
+
+        // Xử lý ảnh trong category đi kèm (nếu có)
+        if (prod.category) {
+          if (
+            prod.category.image &&
+            prod.category.image.includes('viettelidc.com.vn')
+          ) {
+            prod.category.image = `${proxyBaseUrl}?url=${encodeURIComponent(
+              prod.category.image
+            )}`;
+          }
         }
-        return imgUrl;
-      });
 
-      // Xử lý ảnh đại diện đơn lẻ (nếu có)
-      // let finalThumbnail = prod.image;
-      // if (prod.image && prod.image.includes('viettelidc.com.vn')) {
-      //   finalThumbnail = `${proxyBaseUrl}?url=${encodeURIComponent(
-      //     prod.image
-      //   )}`;
-      // }
+        // Xử lý ảnh trong Description của translations
+        const mappedTranslations = (prod.translations || []).map(trans => ({
+          ...trans,
+          description: proxyifyHtml(trans.description),
+        }));
 
-      // Xử lý ảnh trong category đi kèm (nếu có)
-      if (prod.category) {
-        if (
-          prod.category.image &&
-          prod.category.image.includes('viettelidc.com.vn')
-        ) {
-          prod.category.image = `${proxyBaseUrl}?url=${encodeURIComponent(
-            prod.category.image
-          )}`;
+        // Lấy tồn kho từ misaInventoryBalance (nếu sản phẩm có misaModel)
+        let inventoryBalance: any[] = [];
+        if (prod.misaModel) {
+          const invRows = await this.inventoryBalanceRepository
+            .createQueryBuilder('inv')
+            .select([
+              'inv.stockId        AS "stockId"',
+              'inv.stockCode      AS "stockCode"',
+              'inv.stockName      AS "stockName"',
+              'inv.inventoryItemCode AS "inventoryItemCode"',
+              'inv.inventoryItemName AS "inventoryItemName"',
+              'inv.unitName       AS "unitName"',
+              'inv.closingQuantity  AS "closingQuantity"',
+              'inv.openingQuantity  AS "openingQuantity"',
+              'inv.totalInQuantity  AS "totalInQuantity"',
+              'inv.totalOutQuantity AS "totalOutQuantity"',
+              'inv.closingAmount    AS "closingAmount"',
+              'inv.fromDate        AS "fromDate"',
+              'inv.toDate          AS "toDate"',
+              'inv.syncedAt        AS "syncedAt"',
+            ])
+            .where(`inv.inventoryItemCode LIKE :search`, {
+              search: `${prod.misaModel}%`,
+            })
+            .orderBy('inv.stockCode', 'ASC')
+            .getRawMany();
+
+          inventoryBalance = invRows.map(r => ({
+            stockId: r.stockId,
+            stockCode: r.stockCode,
+            stockName: r.stockName,
+            inventoryItemCode: r.inventoryItemCode,
+            inventoryItemName: r.inventoryItemName,
+            unitName: r.unitName,
+            closingQuantity: r.closingQuantity != null ? parseFloat(r.closingQuantity) : null,
+            openingQuantity: r.openingQuantity != null ? parseFloat(r.openingQuantity) : null,
+            totalInQuantity: r.totalInQuantity != null ? parseFloat(r.totalInQuantity) : null,
+            totalOutQuantity: r.totalOutQuantity != null ? parseFloat(r.totalOutQuantity) : null,
+            closingAmount: r.closingAmount != null ? parseFloat(r.closingAmount) : null,
+            fromDate: r.fromDate,
+            toDate: r.toDate,
+            syncedAt: r.syncedAt,
+          }));
         }
-      }
 
-      // Xử lý ảnh trong Description của translations
-      const mappedTranslations = (prod.translations || []).map(trans => ({
-        ...trans,
-        description: proxyifyHtml(trans.description),
-      }));
+        const totalQuantity = inventoryBalance.reduce((sum, item) => sum + (item.closingQuantity || 0), 0);
 
-      return {
-        ...prod,
-        // image: finalThumbnail,
-        images: mappedImages,
-        translations: mappedTranslations,
-      };
-    });
+        return {
+          ...prod,
+          // image: finalThumbnail,
+          images: mappedImages,
+          translations: mappedTranslations,
+          inventoryBalance,
+          totalQuantity,
+        };
+      })
+    );
   }
 
   async findByIds(ids: string[]) {
@@ -777,29 +882,80 @@ export class ProductsService {
       });
     };
 
-    const formattedProducts = products
-      .filter(product => !!product)
-      .map(prod => {
-        // 1. Xử lý mảng images
-        const mappedImages = (prod.images || []).map((imgUrl: string) => {
-          if (imgUrl && imgUrl.includes('viettelidc.com.vn')) {
-            return `${proxyBaseUrl}?url=${encodeURIComponent(imgUrl)}`;
+    const formattedProducts = await Promise.all(
+      products
+        .filter(product => !!product)
+        .map(async prod => {
+          // 1. Xử lý mảng images
+          const mappedImages = (prod.images || []).map((imgUrl: string) => {
+            if (imgUrl && imgUrl.includes('viettelidc.com.vn')) {
+              return `${proxyBaseUrl}?url=${encodeURIComponent(imgUrl)}`;
+            }
+            return imgUrl;
+          });
+
+          // 2. Xử lý Descriptions trong mảng translations (Text Editor)
+          const mappedTranslations = (prod.translations || []).map(trans => ({
+            ...trans,
+            description: proxyifyHtml(trans.description),
+          }));
+
+          // Lấy tồn kho từ misaInventoryBalance (nếu sản phẩm có misaModel)
+          let inventoryBalance: any[] = [];
+          if (prod.misaModel) {
+            const invRows = await this.inventoryBalanceRepository
+              .createQueryBuilder('inv')
+              .select([
+                'inv.stockId        AS "stockId"',
+                'inv.stockCode      AS "stockCode"',
+                'inv.stockName      AS "stockName"',
+                'inv.inventoryItemCode AS "inventoryItemCode"',
+                'inv.inventoryItemName AS "inventoryItemName"',
+                'inv.unitName       AS "unitName"',
+                'inv.closingQuantity  AS "closingQuantity"',
+                'inv.openingQuantity  AS "openingQuantity"',
+                'inv.totalInQuantity  AS "totalInQuantity"',
+                'inv.totalOutQuantity AS "totalOutQuantity"',
+                'inv.closingAmount    AS "closingAmount"',
+                'inv.fromDate        AS "fromDate"',
+                'inv.toDate          AS "toDate"',
+                'inv.syncedAt        AS "syncedAt"',
+              ])
+              .where(`inv.inventoryItemCode LIKE :search`, {
+                search: `${prod.misaModel}%`,
+              })
+              .orderBy('inv.stockCode', 'ASC')
+              .getRawMany();
+
+            inventoryBalance = invRows.map(r => ({
+              stockId: r.stockId,
+              stockCode: r.stockCode,
+              stockName: r.stockName,
+              inventoryItemCode: r.inventoryItemCode,
+              inventoryItemName: r.inventoryItemName,
+              unitName: r.unitName,
+              closingQuantity: r.closingQuantity != null ? parseFloat(r.closingQuantity) : null,
+              openingQuantity: r.openingQuantity != null ? parseFloat(r.openingQuantity) : null,
+              totalInQuantity: r.totalInQuantity != null ? parseFloat(r.totalInQuantity) : null,
+              totalOutQuantity: r.totalOutQuantity != null ? parseFloat(r.totalOutQuantity) : null,
+              closingAmount: r.closingAmount != null ? parseFloat(r.closingAmount) : null,
+              fromDate: r.fromDate,
+              toDate: r.toDate,
+              syncedAt: r.syncedAt,
+            }));
           }
-          return imgUrl;
-        });
 
-        // 2. Xử lý Descriptions trong mảng translations (Text Editor)
-        const mappedTranslations = (prod.translations || []).map(trans => ({
-          ...trans,
-          description: proxyifyHtml(trans.description),
-        }));
+          const totalQuantity = inventoryBalance.reduce((sum, item) => sum + (item.closingQuantity || 0), 0);
 
-        return {
-          ...prod,
-          images: mappedImages,
-          translations: mappedTranslations,
-        };
-      });
+          return {
+            ...prod,
+            images: mappedImages,
+            translations: mappedTranslations,
+            inventoryBalance,
+            totalQuantity,
+          };
+        })
+    );
 
     return formattedProducts;
   }
