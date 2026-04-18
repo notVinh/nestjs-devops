@@ -55,6 +55,8 @@ import { CategoriesModule } from './categories/categories.module';
 import { ProductsModule } from './products/products.module';
 import { QuotationModule } from './quotation/quotation.module';
 import { GeneralRequestModule } from './general-request/general-request.module';
+import { CustomerModule } from './customer/customer.module';
+import { CustomerCareModule } from './customer-care/customer-care.module';
 
 @Module({
   imports: [
@@ -140,6 +142,8 @@ import { GeneralRequestModule } from './general-request/general-request.module';
     ProductsModule,
     QuotationModule,
     GeneralRequestModule,
+    CustomerModule,
+    CustomerCareModule,
   ],
 })
 export class AppModule {}

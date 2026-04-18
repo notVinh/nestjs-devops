@@ -1550,7 +1550,7 @@ export class MisaDataSourceService {
       }
     }
 
-    const activeWorkflowStatuses = ['draft', 'waiting_export', 'in_preparation', 'in_delivery', 'in_installation'];
+    const activeWorkflowStatuses = ['draft', 'waiting_approval', 'waiting_export', 'in_preparation', 'in_delivery', 'in_installation'];
     const allRefIds = [...refNoToRefId.values()];
 
     const activeOrders = await this.saOrderRepository

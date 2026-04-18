@@ -1,4 +1,5 @@
-import { Column, Entity, Index } from 'typeorm';
+import { Column, Entity, Index, ManyToOne, JoinColumn } from 'typeorm';
+import { Employee } from 'src/employee/entities/employee.entity';
 import { EntityHelper } from 'src/utils/entity-helper';
 
 /**
@@ -23,6 +24,47 @@ export class MisaCustomer extends EntityHelper {
   // ====== Địa chỉ ======
   @Column({ type: 'text', nullable: true })
   address: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  shippingAddress: string | null;
+
+  @Column({
+    type: 'point',
+    spatialFeatureType: 'Point',
+    srid: 4326,
+    nullable: true,
+    transformer: {
+      to: (value?: { latitude: number; longitude: number } | string | null) => {
+        if (!value) return null;
+        if (typeof value === 'string') return value;
+        const { longitude, latitude } = value as {
+          latitude: number;
+          longitude: number;
+        };
+        return `(${latitude},${longitude})`;
+      },
+      from: (value: any) => {
+        if (!value) return null;
+        if (
+          typeof value === 'object' &&
+          value.x !== undefined &&
+          value.y !== undefined
+        ) {
+          return { latitude: value.x, longitude: value.y };
+        }
+        if (typeof value === 'string') {
+          const match = value.match(/\(([^,]+),([^)]+)\)/);
+          if (match) {
+            const latitude = parseFloat(match[1]);
+            const longitude = parseFloat(match[2]);
+            return { latitude, longitude };
+          }
+        }
+        return value;
+      },
+    },
+  })
+  location?: { latitude: number; longitude: number } | null;
 
   // ====== Mã số thuế/CCCD chủ hộ ======
   @Column({ type: 'varchar', length: 50, nullable: true })
@@ -94,6 +136,10 @@ export class MisaCustomer extends EntityHelper {
   @Column({ type: 'boolean', default: false })
   inactive: boolean;
 
+  // ====== Hợp đồng & Pháp lý ======
+  @Column({ type: 'jsonb', nullable: true })
+  contractFiles: string[] | null;
+
   // ====== Rank & Doanh thu (được tính toán và lưu lại) ======
 
   /** Rank khách hàng: A / B / C / D (dựa trên doanh thu trung bình/tháng) */
@@ -111,6 +157,128 @@ export class MisaCustomer extends EntityHelper {
   /** Thời điểm cập nhật rank lần cuối */
   @Column({ type: 'timestamp with time zone', nullable: true })
   rankUpdatedAt: Date | null;
+
+  // ====== Thông tin chăm sóc khách hàng ======
+
+  /**
+   * Chu kỳ chăm sóc (số ngày giữa các lần chăm sóc)
+   * Ví dụ: 30 = mỗi 30 ngày phải chăm sóc 1 lần
+   */
+  @Column({ type: 'int', nullable: true })
+  careIntervalDays: number | null;
+
+  /**
+   * ID của nhân viên phụ trách chăm sóc khách hàng này (FK → employee.id)
+   */
+  @Column({ type: 'bigint', nullable: true })
+  @Index()
+  careById: number | null;
+
+  /**
+   * Ngày chăm sóc gần nhất (lần chăm sóc cuối cùng)
+   */
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  lastCaredAt: Date | null;
+
+  /**
+   * Ngày chăm sóc tiếp theo (tự động = lastCaredAt + careIntervalDays)
+   * Có thể set thủ công nếu cần
+   */
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  nextCareAt: Date | null;
+
+  /**
+   * Ghi chú chăm sóc (nội dung trao đổi, yêu cầu của khách...)
+   */
+  @Column({ type: 'text', nullable: true })
+  careNote: string | null;
+
+  // Relation: Nhân viên chăm sóc
+  @ManyToOne(() => Employee, { nullable: true, eager: false })
+  @JoinColumn({ name: 'careById' })
+  employee: Employee;
+
+  // ====== Thông tin sản xuất & Đầu tư ======
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  garmentType: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  currentEquipment: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  investmentPotential: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  workerScale: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  averageMonthlyCapacity: number | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  qualityStandard: string | null;
+
+  // ====== Chính sách bán hàng ======
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  acquisitionSource: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  customerGroup: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  priceGroup: string | null;
+
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
+  discountRate: number | null;
+
+  @Column({ type: 'decimal', precision: 18, scale: 2, nullable: true })
+  minOrderValue: number | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  salesRegion: string | null;
+
+  // ====== Công nợ ======
+  @Column({ type: 'boolean', default: false })
+  isBlockedDebt: boolean;
+
+  @Column({ type: 'int', nullable: true })
+  debtGraceDays: number | null;
+
+  @Column({ type: 'decimal', precision: 18, scale: 2, nullable: true })
+  creditLimit: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  paymentTermDays: number | null;
+
+  @Column({ type: 'decimal', precision: 18, scale: 2, default: 0 })
+  currentDebt: number;
+
+  @Column({ type: 'decimal', precision: 18, scale: 2, default: 0 })
+  overdueDebt: number;
+
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  lastPaymentDate: Date | null;
+
+  @Column({ type: 'decimal', precision: 18, scale: 2, nullable: true })
+  lastPaymentAmount: number | null;
+
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  debtUpdatedAt: Date | null;
+
+  // ====== Thanh toán / Ngân hàng ======
+  @Column({ type: 'boolean', default: false })
+  isInvoiced: boolean;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  paymentMethod: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  bankName: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  bankAccountNumber: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  bankBranch: string | null;
 
   // ====== Mapping từ MISA response ======
   /**

@@ -3,8 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 import { Logger } from 'winston';
+import ExcelJS from 'exceljs';
 import { ArrivalReport } from './entities/arrival-report.entity';
 import { Employee } from 'src/employee/entities/employee.entity';
+import { Factory } from 'src/factory/entities/factory.entity';
 import { CreateArrivalReportDto } from './dto/create-arrival-report.dto';
 import { PaginationHelper } from 'src/utils/pagination.helper';
 import {
@@ -25,6 +27,8 @@ export class ArrivalReportService {
     private arrivalReportRepository: Repository<ArrivalReport>,
     @InjectRepository(Employee)
     private readonly employeeRepository: Repository<Employee>,
+    @InjectRepository(Factory)
+    private readonly factoryRepository: Repository<Factory>,
     private readonly notificationService: NotificationService,
     @Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger
   ) {}
@@ -468,5 +472,289 @@ export class ArrivalReportService {
       });
       throw error;
     }
+  }
+
+  // ========== XLSX EXPORT ==========
+
+  private setThinBorder(cell: ExcelJS.Cell) {
+    cell.border = {
+      top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+      left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+      bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+      right: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+    };
+  }
+
+  private getDayOfWeek(day: number): string {
+    const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    return days[day];
+  }
+
+  // Xuất báo cáo đi công tác (đến nơi) theo tháng - chỉ hiển thị nhân viên có báo cáo
+  async generateArrivalReportXLSX(
+    factoryId: number,
+    year: number,
+    month: number
+  ): Promise<ArrayBuffer> {
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59);
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    // Lấy thông tin nhà máy
+    const factory = await this.factoryRepository.findOne({
+      where: { id: factoryId },
+    });
+
+    // Lấy tất cả báo cáo đi đến nơi công tác trong tháng
+    const reports = await this.arrivalReportRepository
+      .createQueryBuilder('report')
+      .leftJoinAndSelect('report.employee', 'employee')
+      .leftJoinAndSelect('employee.user', 'user')
+      .leftJoinAndSelect('employee.position', 'position')
+      .leftJoinAndSelect('employee.department', 'department')
+      .leftJoinAndSelect('employee.team', 'team')
+      .where('report.factoryId = :factoryId', { factoryId })
+      .andWhere('report.arrivalDate >= :startDate', { startDate })
+      .andWhere('report.arrivalDate <= :endDate', { endDate })
+      .orderBy('report.arrivalDate', 'ASC')
+      .getMany();
+
+    // Tạo map báo cáo theo employeeId và ngày (có thể có nhiều báo cáo 1 ngày)
+    const reportMap = new Map<string, ArrivalReport[]>();
+    const employeesWithReports = new Map<number, Employee>();
+
+    reports.forEach(report => {
+      if (report.arrivalDate) {
+        const reportDate = new Date(report.arrivalDate);
+        const day = reportDate.getDate();
+        const key = `${report.employeeId}_${day}`;
+        if (!reportMap.has(key)) {
+          reportMap.set(key, []);
+        }
+        reportMap.get(key)!.push(report);
+      }
+
+      // Lưu thông tin nhân viên có báo cáo
+      if (report.employee && !employeesWithReports.has(report.employeeId)) {
+        employeesWithReports.set(report.employeeId, report.employee);
+      }
+    });
+
+    // Tạo workbook
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Báo cáo đi đến nơi CT');
+
+    const totalCols = 4 + daysInMonth; // STT chung + STT phòng ban + Tên + Vị trí + các ngày
+
+    // Row 1: Tên nhà máy
+    sheet.addRow([factory?.name ?? 'Nhà máy']);
+    sheet.mergeCells(1, 1, 1, totalCols + 1); // +1 for Tổng cộng
+    const factoryNameCell = sheet.getCell(1, 1);
+    factoryNameCell.font = { bold: true, size: 16 };
+    factoryNameCell.alignment = { horizontal: 'left' };
+
+    // Row 2: Tiêu đề
+    sheet.addRow([`Bảng tổng hợp báo cáo đi đến nơi công tác tháng ${month}/${year}`]);
+    sheet.mergeCells(2, 1, 2, totalCols + 1);
+    const titleCell = sheet.getCell(2, 1);
+    titleCell.font = { bold: true, size: 14 };
+    titleCell.alignment = { horizontal: 'center' };
+
+    // Row 3 & 4: Header
+    const headerRow1 = sheet.addRow([
+      'STT',
+      '',
+      'Tên nhân viên',
+      'Vị trí',
+      ...Array.from({ length: daysInMonth }, (_, i) => `${i + 1}`),
+      'Tổng',
+    ]);
+    const headerRow2 = sheet.addRow([
+      '',
+      '',
+      '',
+      '',
+      ...Array.from({ length: daysInMonth }, (_, i) =>
+        this.getDayOfWeek(new Date(year, month - 1, i + 1).getDay())
+      ),
+      '',
+    ]);
+
+    // Merge header cells
+    sheet.mergeCells(3, 1, 3, 2); // STT header
+    sheet.mergeCells(3, 3, 4, 3); // Tên nhân viên
+    sheet.mergeCells(3, 4, 4, 4); // Vị trí
+    sheet.mergeCells(3, totalCols + 1, 4, totalCols + 1); // Tổng
+
+    // Style headers
+    [headerRow1, headerRow2].forEach(r => {
+      r.eachCell(cell => {
+        cell.font = { bold: true };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        this.setThinBorder(cell);
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE6F0FF' },
+        };
+      });
+    });
+
+    // Column widths
+    sheet.getColumn(1).width = 6; // STT chung
+    sheet.getColumn(2).width = 6; // STT phòng ban
+    sheet.getColumn(3).width = 24; // Tên
+    sheet.getColumn(4).width = 16; // Vị trí
+    for (let col = 5; col <= totalCols; col++) {
+      sheet.getColumn(col).width = 15; // Day columns width increased to fit company names
+    }
+    sheet.getColumn(totalCols + 1).width = 8; // Tổng
+
+    // Nhóm nhân viên theo phòng ban
+    const employeesByDepartment = new Map<string, Map<string, Employee[]>>();
+
+    employeesWithReports.forEach(employee => {
+      const deptName = (employee as any).department?.name || 'Chưa xác định';
+      const teamName = (employee as any).team?.name || 'Chưa phân tổ';
+
+      if (!employeesByDepartment.has(deptName)) {
+        employeesByDepartment.set(deptName, new Map());
+      }
+
+      const deptMap = employeesByDepartment.get(deptName)!;
+      if (!deptMap.has(teamName)) {
+        deptMap.set(teamName, []);
+      }
+
+      deptMap.get(teamName)!.push(employee);
+    });
+
+    // Sắp xếp phòng ban
+    const sortedDepartments = Array.from(employeesByDepartment.keys()).sort();
+
+    let index = 1;
+    for (const deptName of sortedDepartments) {
+      // Department header row
+      const deptRow = sheet.addRow([deptName]);
+      sheet.mergeCells(deptRow.number, 1, deptRow.number, totalCols + 1);
+      const deptCell = sheet.getCell(deptRow.number, 1);
+      deptCell.font = { bold: true };
+      deptCell.alignment = { horizontal: 'left' };
+      deptCell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFD8EAD3' },
+      };
+
+      const teamsInDept = employeesByDepartment.get(deptName)!;
+      const sortedTeams = Array.from(teamsInDept.keys()).sort((a, b) => {
+        if (a === 'Chưa phân tổ') return 1;
+        if (b === 'Chưa phân tổ') return -1;
+        return a.localeCompare(b);
+      });
+
+      let deptIndex = 1;
+      for (const teamName of sortedTeams) {
+        // Team header row
+        if (sortedTeams.length > 1 || teamName !== 'Chưa phân tổ') {
+          const teamRow = sheet.addRow([`  ${teamName}`]);
+          sheet.mergeCells(teamRow.number, 1, teamRow.number, totalCols + 1);
+          const teamCell = sheet.getCell(teamRow.number, 1);
+          teamCell.font = { bold: true, italic: true };
+          teamCell.alignment = { horizontal: 'left' };
+          teamCell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF0F4C3' },
+          };
+        }
+
+        const employees = teamsInDept.get(teamName)!;
+        for (const employee of employees) {
+          const rowValues: (string | number)[] = [
+            index,
+            deptIndex,
+            (employee as any).user?.fullName || '',
+            (employee as any).position?.name || 'Chưa xác định',
+          ];
+
+          let totalReports = 0;
+
+          // Thêm dữ liệu từng ngày
+          for (let day = 1; day <= daysInMonth; day++) {
+            const key = `${employee.id}_${day}`;
+            const employeeReports = reportMap.get(key);
+
+            if (employeeReports && employeeReports.length > 0) {
+              const companyNames = employeeReports
+                .map(r => r.companyName)
+                .filter(name => name && name.trim().length > 0)
+                .join(', ') || 'x';
+
+              rowValues.push(companyNames);
+              totalReports++;
+            } else {
+              rowValues.push('');
+            }
+          }
+
+          // Tổng số ngày báo cáo
+          rowValues.push(totalReports);
+
+          const r = sheet.addRow(rowValues);
+
+          // Style cells
+          for (let c = 1; c <= totalCols + 1; c++) {
+            const rc = r.getCell(c);
+            this.setThinBorder(rc);
+
+            if (c === 1 || c === 2) {
+              rc.alignment = { horizontal: 'center', vertical: 'middle' };
+            } else if (c >= 5 && c <= 4 + daysInMonth) {
+              rc.alignment = { horizontal: 'center', vertical: 'middle' };
+
+              // Highlight cells có báo cáo
+              if (rc.value && rc.value !== '') {
+                rc.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FFE6D5FF' }, // Light purple
+                };
+                rc.font = { bold: true };
+                rc.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+              }
+
+              // Ngày Chủ nhật tô màu xám nhạt
+              const day = c - 4;
+              const dow = new Date(year, month - 1, day).getDay();
+              if (dow === 0 && (!rc.value || rc.value === '')) {
+                rc.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FFEFEFEF' },
+                };
+              }
+            } else if (c === totalCols + 1) {
+              rc.alignment = { horizontal: 'center', vertical: 'middle' };
+              rc.font = { bold: true };
+            }
+          }
+
+          index++;
+          deptIndex++;
+        }
+      }
+    }
+
+    // Nếu không có báo cáo nào
+    if (employeesWithReports.size === 0) {
+      const emptyRow = sheet.addRow(['Không có báo cáo trong tháng này']);
+      sheet.mergeCells(emptyRow.number, 1, emptyRow.number, totalCols + 1);
+      const emptyCell = sheet.getCell(emptyRow.number, 1);
+      emptyCell.alignment = { horizontal: 'center' };
+      emptyCell.font = { italic: true };
+    }
+
+    return await workbook.xlsx.writeBuffer();
   }
 }

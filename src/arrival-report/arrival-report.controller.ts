@@ -11,7 +11,9 @@ import {
   HttpStatus,
   DefaultValuePipe,
   ParseIntPipe,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { ArrivalReportService } from './arrival-report.service';
@@ -152,5 +154,30 @@ export class ArrivalReportController {
       'Lấy chi tiết báo cáo thành công',
       HTTP_STATUS_CODE.OK,
     );
+  }
+
+  @Get('export/:factoryId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Xuất báo cáo đi đến nơi công tác theo tháng ra file Excel' })
+  async exportXLSX(
+    @Param('factoryId', ParseIntPipe) factoryId: number,
+    @Query('year', ParseIntPipe) year: number,
+    @Query('month', ParseIntPipe) month: number,
+    @Res() res: Response,
+  ): Promise<void> {
+    const buffer = await this.arrivalReportService.generateArrivalReportXLSX(
+      factoryId,
+      year,
+      month,
+    );
+
+    const fileName = `bao-cao-den-noi-cong-tac-${month}-${year}.xlsx`;
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(Buffer.from(buffer));
   }
 }
