@@ -65,6 +65,17 @@ export class CustomerController {
   }
 
   // ---------------------------------------------------------------
+  // GET /v1/customers/sales-staff-stats
+  // ---------------------------------------------------------------
+  @Get('sales-staff-stats/get')
+  @ApiOperation({ summary: 'Thống kê danh sách NV kinh doanh (số KH, số lượt chăm sóc)' })
+  @ApiResponse({ status: 200, description: 'Lấy thống kê thành công' })
+  getSalesStaffStats() {
+    return this.customerService.getSalesStaffStats();
+  }
+
+
+  // ---------------------------------------------------------------
   // GET /v1/customers/:id
   // Chi tiết khách hàng theo ID (bigint)
   // ---------------------------------------------------------------

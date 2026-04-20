@@ -117,9 +117,9 @@ export class MisaApiService {
       const response = await axios.post(url, requestBody, {
         headers: this.buildMisaHeaders(token, apiConfig),
         timeout: 60000,
-        httpsAgent: new https.Agent({
-          rejectUnauthorized: false
-        })
+        // httpsAgent: new https.Agent({
+        //   rejectUnauthorized: false
+        // })
       });
 
       const responseData = response.data;
@@ -139,7 +139,8 @@ export class MisaApiService {
           error.code === 'NotAuthorize' ||
           error.code === 'Unauthorized' ||
           error.code === 'TokenExpired' ||
-          error.message?.includes('NotAuthorize');
+          error.message?.includes('NotAuthorize') ||
+          error.message?.includes('Không lấy được thông tin user');
 
         return {
           success: false,
@@ -153,12 +154,25 @@ export class MisaApiService {
     } catch (error: any) {
       const errorData = error.response?.data;
       const status = error.response?.status;
-      const isAuthError =
+      let isAuthError =
         status === 401 ||
         status === 403 ||
         errorData?.Code === 'NotAuthorize' ||
         errorData?.Code === 'Unauthorized' ||
         errorData?.Code === 'TokenExpired';
+
+      // Treat "Không lấy được thông tin user" error as auth error to trigger token refresh
+      if (
+        status === 500 &&
+        (
+          (typeof errorData === 'string' && errorData.includes('Không lấy được thông tin user')) ||
+          (errorData?.message?.includes('Không lấy được thông tin user')) ||
+          (errorData?.Message?.includes('Không lấy được thông tin user')) ||
+          (error.message?.includes('Không lấy được thông tin user'))
+        )
+      ) {
+        isAuthError = true;
+      }
 
       if (errorData?.Success === false) {
         const parsedError = this.parseMisaError(errorData);

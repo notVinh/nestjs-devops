@@ -162,9 +162,11 @@ export class CustomerCareService {
         'c.checkInTime',
         'c.checkInLocation',
         'c.checkInNote',
+        'c.checkInPhotoUrls',
         'c.checkOutTime',
         'c.checkOutLocation',
         'c.checkOutNote',
+        'c.checkOutPhotoUrls',
         'c.stayDurationMinutes',
         'c.distanceMeters',
         'c.status',
@@ -172,11 +174,12 @@ export class CustomerCareService {
         'customer.accountObjectName',
         'employee.id',
         'user.fullName',
-      ])
-      .where('c.employeeId = :employeeId', { employeeId });
+      ]);
 
     if (customerId) {
-      qb.andWhere('c.customerId = :customerId', { customerId });
+      qb.where('c.customerId = :customerId', { customerId });
+    } else {
+      qb.where('c.employeeId = :employeeId', { employeeId });
     }
 
     qb.orderBy('c.checkInTime', 'DESC');

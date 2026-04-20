@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, ILike } from 'typeorm';
 import { MisaCustomer } from 'src/misa-token/entities/misa-customer.entity';
 import { CreateCustomerDto } from './dto/create-customer.dto';
+import { Employee } from 'src/employee/entities/employee.entity';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { QueryCustomerDto } from './dto/query-customer.dto';
 import { v4 as uuidv4 } from 'uuid';
@@ -16,6 +17,8 @@ export class CustomerService {
   constructor(
     @InjectRepository(MisaCustomer)
     private readonly customerRepository: Repository<MisaCustomer>,
+    @InjectRepository(Employee)
+    private readonly employeeRepository: Repository<Employee>,
   ) {}
 
   // ===================================================================
@@ -274,5 +277,39 @@ export class CustomerService {
       .orderBy('c.accountObjectName', 'ASC')
       .take(20)
       .getMany();
+  }
+
+  // ===================================================================
+  // Lấy danh sách NV Kinh Doanh (positionId = 13) và số lượng khách
+  // ===================================================================
+  async getSalesStaffStats() {
+    const qb = this.employeeRepository
+      .createQueryBuilder('e')
+      .leftJoin('e.user', 'u')
+      .leftJoin('u.photo', 'photo')
+      .leftJoin('misaCustomer', 'c', 'c.careById = e.id AND c.deletedAt IS NULL')
+      .leftJoin('customerCare', 'cc', 'cc.employeeId = e.id')
+      .select([
+        'e.id as "employeeId"',
+        'u.fullName as "fullName"',
+        'photo.path as "avatarUrl"',
+        'COUNT(DISTINCT c.id) as "totalCustomers"',
+        'COUNT(DISTINCT cc.id) as "totalCares"',
+      ])
+      .where('e.positionId = :positionId', { positionId: 13 })
+      .groupBy('e.id')
+      .addGroupBy('u.id')
+      .addGroupBy('photo.id')
+      .orderBy('"totalCustomers"', 'DESC');
+
+    const result = await qb.getRawMany();
+
+    return result.map((row) => ({
+      employeeId: parseInt(row.employeeId, 10),
+      fullName: row.fullName || null,
+      // avatarUrl: row.avatarUrl || null,
+      totalCustomers: parseInt(row.totalCustomers || '0', 10),
+      totalCares: parseInt(row.totalCares || '0', 10),
+    }));
   }
 }
