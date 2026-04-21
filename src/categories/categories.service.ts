@@ -6,7 +6,7 @@ import { CategoryTranslation } from './entities/category-translation.entity';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { MisaInventoryBalance } from 'src/misa-token/entities/misa-inventory-balance.entity';
-
+import * as ExcelJS from 'exceljs';
 
 @Injectable()
 export class CategoriesService {
@@ -565,5 +565,90 @@ export class CategoriesService {
     }
 
     return category;
+  }
+
+  /**
+   * EXPORT EXCEL: Xuất danh mục và sản phẩm (Tên TV, Model)
+   */
+  async exportExcel(): Promise<ArrayBuffer> {
+    const [data] = await this.categoryRepository.findAndCount({
+      relations: ['translations', 'products', 'products.translations'],
+      order: {
+        order: 'ASC',
+        id: 'DESC',
+      },
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Danh muc San pham');
+
+    // Header
+    sheet.addRow(['Danh mục', 'Tên sản phẩm (Tiếng Việt)', 'Model']);
+
+    // Set width cho các cột
+    sheet.getColumn(1).width = 40;
+    sheet.getColumn(2).width = 50;
+    sheet.getColumn(3).width = 25;
+
+    // Style header
+    const headerRow = sheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+    headerRow.eachCell(cell => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE6F0FF' },
+      };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+        left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+        bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+        right: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+      };
+    });
+
+    let rowIndex = 2;
+
+    data.forEach(category => {
+      // Lấy tên tiếng Việt của Danh mục
+      const catVi = category.translations?.find(t => t.languageCode === 'vi');
+      const catName = catVi ? catVi.name : 'Không có tên';
+
+      if (category.products && category.products.length > 0) {
+        // Nếu có sản phẩm thì duyệt từng sản phẩm
+        category.products.forEach(product => {
+          // Lấy tên tiếng Việt của Sản phẩm
+          const prodVi = product.translations?.find(t => t.languageCode === 'vi');
+          const prodName = prodVi ? prodVi.name : 'Không có tên';
+          
+          const row = sheet.addRow([catName, prodName, product.model || '']);
+          // Style border cho các dòng content
+          row.eachCell(cell => {
+             cell.border = {
+              top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+              left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+              bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+              right: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+            };
+          });
+          rowIndex++;
+        });
+      } else {
+        // Nếu danh mục không có sản phẩm nào
+        const row = sheet.addRow([catName, '', '']);
+         row.eachCell(cell => {
+             cell.border = {
+              top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+              left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+              bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+              right: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+            };
+          });
+        rowIndex++;
+      }
+    });
+
+    return await workbook.xlsx.writeBuffer() as ArrayBuffer;
   }
 }

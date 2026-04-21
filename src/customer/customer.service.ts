@@ -264,6 +264,8 @@ export class CustomerService {
 
     return this.customerRepository
       .createQueryBuilder('c')
+      .leftJoinAndSelect('c.employee', 'employee')
+      .leftJoinAndSelect('employee.user', 'employeeUser')
       .where('c.deletedAt IS NULL')
       .andWhere('c.inactive = false')
       .andWhere(

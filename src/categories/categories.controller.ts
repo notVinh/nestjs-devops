@@ -7,11 +7,13 @@ import {
   Param,
   Delete,
   Query,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
-import { ApiTags, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiQuery, ApiOperation } from '@nestjs/swagger';
 
 @ApiTags('Categories')
 @Controller({
@@ -32,6 +34,20 @@ export class CategoriesController {
   //   // Truyền lang vào service, nếu lang undefined service sẽ dùng mặc định 'vi'
   //   return this.categoriesService.findAll(lang);
   // }
+
+  @Get('export-excel')
+  @ApiOperation({ summary: 'Xuất danh mục và sản phẩm ra file Excel' })
+  async exportExcel(@Res() res: Response) {
+    const buffer = await this.categoriesService.exportExcel();
+    const fileName = `danh-muc-san-pham.xlsx`;
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(Buffer.from(buffer as ArrayBuffer));
+  }
 
   @Get()
   async findAll() {
